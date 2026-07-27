@@ -65,6 +65,7 @@ last edit:
       via `GET /api/v1/capabilities` (see [ai-setup.md](./ai-setup.md))
 - [ ] AI output quality validated with a real upload/wardrobe (the provider
       choice above used a synthetic benchmark, not real items yet)
-- [ ] Gallery UI port (from tandpfun)
+- [x] Gallery UI port (from tandpfun) — clean grid/cards, calmer shell, auto +
+      bulk white-background thumbnails via rembg
 - [ ] Virtual try-on POC (from tandpfun, OpenAI `gpt-image`)
 - [ ] Remote access for second user (deferred — Cloudflare Tunnel direction)

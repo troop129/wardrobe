@@ -185,6 +185,16 @@ def _response_rejects_max_tokens(response: httpx.Response) -> bool:
     )
 
 
+def _response_rejects_temperature(response: httpx.Response) -> bool:
+    """Some models (notably the gpt-5.x/gpt-5.6 family) only accept the default
+    temperature of 1 and reject any other value. Detected from the error body so
+    the same code path works for any provider that surfaces the same constraint."""
+    text = response.text.lower()
+    return response.status_code == 400 and "temperature" in text and (
+        "unsupported" in text or "only the default" in text
+    )
+
+
 _CONFIDENCE_FIELDS = {"type", "primary_color", "pattern", "material", "formality"}
 
 
@@ -706,6 +716,10 @@ class AIService:
         for endpoint in self._endpoints:
             logger.info(f"Trying text generation via {endpoint.name}")
             use_max_completion_tokens = False
+            # Prefer a slightly lower temperature for outfit suggestions, but some
+            # models (gpt-5.x/gpt-5.6) only accept the default of 1 — drop it on
+            # rejection rather than failing the whole request.
+            include_temperature = True
 
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 attempt = 0
@@ -714,16 +728,18 @@ class AIService:
                         token_param = (
                             "max_completion_tokens" if use_max_completion_tokens else "max_tokens"
                         )
+                        request_body: dict = {
+                            "model": endpoint.text_model,
+                            "messages": messages,
+                            "stream": False,
+                            token_param: self.settings.ai_max_tokens,
+                        }
+                        if include_temperature:
+                            request_body["temperature"] = 0.4
                         response = await client.post(
                             f"{endpoint.url}/chat/completions",
                             headers=self._get_headers(endpoint.api_key),
-                            json={
-                                "model": endpoint.text_model,
-                                "messages": messages,
-                                "stream": False,
-                                "temperature": 0.4,
-                                token_param: self.settings.ai_max_tokens,
-                            },
+                            json=request_body,
                         )
                         response.raise_for_status()
 
@@ -776,6 +792,13 @@ class AIService:
                                 f"retrying with max_completion_tokens: {e}"
                             )
                             use_max_completion_tokens = True
+                            continue
+                        if include_temperature and _response_rejects_temperature(e.response):
+                            logger.warning(
+                                f"{endpoint.name} rejected custom temperature for text "
+                                f"generation, retrying without it: {e}"
+                            )
+                            include_temperature = False
                             continue
                         last_error = e
                         logger.warning(f"HTTP error from {endpoint.name}: {e}")

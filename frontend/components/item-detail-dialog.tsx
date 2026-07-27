@@ -91,6 +91,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const [showWashHistory, setShowWashHistory] = useState(false);
   const [showWearHistory, setShowWearHistory] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [showMoreActions, setShowMoreActions] = useState(false);
 
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
@@ -123,6 +124,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       });
       setIsEditing(false);
       setActiveImageIndex(0);
+      setShowMoreActions(false);
     }
   }, [item?.id]);
 
@@ -258,142 +260,152 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden [&>button]:hidden">
           {/* Header - sticky */}
-          <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-4 border-b flex-shrink-0">
-            <DialogTitle className="text-xl min-w-0 truncate">
-              {item.name || typeInfo?.label || item.type}
-            </DialogTitle>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleToggleFavorite}
-                disabled={updateItem.isPending}
-                title="Toggle favorite"
-              >
-                <Heart
-                  className={`h-5 w-5 ${
-                    item.favorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
-                  }`}
-                />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowPairingsDialog(true)}
-                disabled={item.status !== 'ready'}
-                title="Find matching outfits"
-              >
-                <Layers className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleReanalyze}
-                disabled={isAnalyzing}
-                title={isAnalyzing ? 'Analysis in progress...' : 'Re-analyze with AI'}
-              >
-                <RefreshCw
-                  className={`h-5 w-5 ${isAnalyzing ? 'animate-spin text-primary' : ''}`}
-                />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleRotate('ccw')}
-                disabled={rotateImage.isPending}
-                title="Rotate left"
-              >
-                {rotateImage.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <RotateCcw className="h-5 w-5" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleRotate('cw')}
-                disabled={rotateImage.isPending}
-                title="Rotate right"
-              >
-                {rotateImage.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <RotateCw className="h-5 w-5" />
-                )}
-              </Button>
-              {features?.background_removal && (
+          <DialogHeader className="flex flex-col space-y-0 p-0 border-b flex-shrink-0">
+            <div className="flex flex-row items-center justify-between space-y-0 p-4">
+              <DialogTitle className="text-xl min-w-0 truncate">
+                {item.name || typeInfo?.label || item.type}
+              </DialogTitle>
+              <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handleRemoveBackground}
-                  disabled={removeBackground.isPending || !item.image_url}
-                  title="Remove background"
+                  onClick={handleToggleFavorite}
+                  disabled={updateItem.isPending}
+                  title="Toggle favorite"
                 >
-                  {removeBackground.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Eraser className="h-5 w-5" />
-                  )}
+                  <Heart
+                    className={`h-5 w-5 ${
+                      item.favorite ? 'fill-foreground text-foreground' : 'text-muted-foreground'
+                    }`}
+                  />
                 </Button>
-              )}
-              {item.original_image_path && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handleRestoreOriginal}
-                  disabled={restoreOriginal.isPending}
-                  title="Undo background removal"
+                  onClick={() => setIsEditing(!isEditing)}
+                  title={isEditing ? 'Cancel editing' : 'Edit item'}
                 >
-                  {restoreOriginal.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                  {isEditing ? (
+                    <X className="h-5 w-5" />
                   ) : (
-                    <Undo2 className="h-5 w-5" />
+                    <Pencil className="h-5 w-5" />
                   )}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => replaceImageInputRef.current?.click()}
-                disabled={replaceImage.isPending}
-                title="Replace image"
-              >
-                {replaceImage.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <ImagePlus className="h-5 w-5" />
-                )}
-              </Button>
-              <input
-                ref={replaceImageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleReplaceImage(file);
-                  }
-                  e.target.value = '';
-                }}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsEditing(!isEditing)}
-                title={isEditing ? 'Cancel editing' : 'Edit item'}
-              >
-                {isEditing ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden sm:inline-flex text-xs"
+                  onClick={() => setShowMoreActions((v) => !v)}
+                >
+                  {showMoreActions ? 'Less' : 'More'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="sm:hidden"
+                  onClick={() => setShowMoreActions((v) => !v)}
+                  title="More actions"
+                >
+                  <ChevronDown
+                    className={`h-5 w-5 transition-transform ${showMoreActions ? 'rotate-180' : ''}`}
+                  />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full" title="Close">
                   <X className="h-5 w-5" />
-                ) : (
-                  <Pencil className="h-5 w-5" />
-                )}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full" title="Close">
-                <X className="h-5 w-5" />
-              </Button>
+                </Button>
+              </div>
             </div>
+            {showMoreActions && (
+              <div className="flex flex-wrap items-center gap-1 border-t px-4 py-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setShowPairingsDialog(true)}
+                  disabled={item.status !== 'ready'}
+                >
+                  <Layers className="h-3.5 w-3.5 mr-1.5" />
+                  Pairings
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={handleReanalyze}
+                  disabled={isAnalyzing}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  Re-analyze
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => handleRotate('ccw')}
+                  disabled={rotateImage.isPending}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Rotate left
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => handleRotate('cw')}
+                  disabled={rotateImage.isPending}
+                >
+                  <RotateCw className="h-3.5 w-3.5 mr-1.5" />
+                  Rotate right
+                </Button>
+                {features?.background_removal && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={handleRemoveBackground}
+                    disabled={removeBackground.isPending || !item.image_url}
+                  >
+                    <Eraser className="h-3.5 w-3.5 mr-1.5" />
+                    Clean background
+                  </Button>
+                )}
+                {item.original_image_path && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={handleRestoreOriginal}
+                    disabled={restoreOriginal.isPending}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                    Restore photo
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => replaceImageInputRef.current?.click()}
+                  disabled={replaceImage.isPending}
+                >
+                  <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+                  Replace image
+                </Button>
+                <input
+                  ref={replaceImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleReplaceImage(file);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            )}
           </DialogHeader>
 
           {/* Scrollable content */}
@@ -401,7 +413,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
             <div className="grid gap-6 sm:grid-cols-2 [&>*]:min-w-0">
             {/* Image Gallery */}
             <div className="space-y-2">
-              <div className="relative aspect-square bg-muted rounded-lg overflow-hidden">
+              <div className="relative aspect-square bg-white rounded-lg overflow-hidden border border-border/60">
                 {(() => {
                   const allImages = [
                     { url: `${imageUrl}&v=${imageKey}`, id: 'primary' },
@@ -415,7 +427,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                         src={currentImage.url}
                         alt={item.name || item.type}
                         fill
-                        className="object-cover"
+                        className="object-contain p-4"
                         sizes="(max-width: 640px) 100vw, 50vw"
                       />
                       {allImages.length > 1 && (

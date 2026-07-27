@@ -17,6 +17,7 @@ from app.workers.notifications import (
     update_learning_profiles,
 )
 from app.workers.settings import get_redis_settings
+from app.workers.background import remove_item_background_job
 from app.workers.tagging import tag_item_image
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ async def shutdown(ctx: dict) -> None:
 class WorkerSettings:
     functions = [
         tag_item_image,
+        remove_item_background_job,
         send_notification,
         retry_failed_notifications,
         check_scheduled_notifications,

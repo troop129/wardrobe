@@ -41,11 +41,11 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
-      <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r bg-card px-6 pb-4">
+      <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border/70 bg-card/50 px-6 pb-4">
         <div className="flex h-16 shrink-0 items-center">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <img src="/logo.svg" alt="Wardrowbe" className="h-8 w-8" />
-            <span className="text-xl font-bold">wardrowbe</span>
+            <img src="/logo.svg" alt="Wardrowbe" className="h-7 w-7" />
+            <span className="text-lg font-semibold tracking-tight">wardrowbe</span>
           </Link>
         </div>
         <nav className="flex flex-1 flex-col">
@@ -62,13 +62,13 @@ export function Sidebar() {
                       <Link
                         href={item.href}
                         className={cn(
-                          'group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6',
+                          'group flex gap-x-3 rounded-md border-l-2 border-transparent py-2 pl-3 pr-2 text-sm font-medium leading-6',
                           isActive
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                            ? 'border-foreground bg-muted/70 text-foreground'
+                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         )}
                       >
-                        <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
+                        <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                         {item.name}
                       </Link>
                     </li>
@@ -77,7 +77,7 @@ export function Sidebar() {
               </ul>
             </li>
             <li>
-              <div className="text-xs font-semibold leading-6 text-muted-foreground">
+              <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 Settings
               </div>
               <ul role="list" className="-mx-2 mt-2 space-y-1">
@@ -92,13 +92,13 @@ export function Sidebar() {
                       <Link
                         href={item.href}
                         className={cn(
-                          'group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6',
+                          'group flex gap-x-3 rounded-md border-l-2 border-transparent py-2 pl-3 pr-2 text-sm font-medium leading-6',
                           isActive
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                            ? 'border-foreground bg-muted/70 text-foreground'
+                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         )}
                       >
-                        <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
+                        <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                         {item.name}
                       </Link>
                     </li>

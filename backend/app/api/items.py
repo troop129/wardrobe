@@ -35,6 +35,7 @@ from app.schemas.item import (
     ReorderImagesRequest,
     WashHistoryResponse,
 )
+from app.services.background_removal import is_background_removal_available
 from app.services.image_service import ImageService
 from app.services.item_service import ItemService
 from app.utils.auth import get_current_user
@@ -47,6 +48,21 @@ router = APIRouter(prefix="/items", tags=["Items"])
 
 TAG_WRITEBACK_FIELDS = {"type", "subtype", "colors", "primary_color", "tags"}
 _EMPTY_TAG_VALUES = (None, "", [], {})
+
+
+def _should_auto_background_removal() -> bool:
+    return settings.auto_background_removal and is_background_removal_available()
+
+
+async def _enqueue_background_removal_job(redis, item_id: UUID, image_relative_path: str) -> None:
+    full_image_path = f"{settings.storage_path}/{image_relative_path}"
+    await redis.enqueue_job(
+        "remove_item_background_job",
+        str(item_id),
+        full_image_path,
+        _queue_name="arq:tagging",
+    )
+    logger.info("Queued background removal for item %s", item_id)
 
 
 def _has_tag_content(field: str, value: Any) -> bool:
@@ -184,27 +200,34 @@ async def create_item(
     )
 
     do_auto_tag = settings.effective_ai_vision_enabled and not skip_ai
+    queue_bg = _should_auto_background_removal()
 
-    if do_auto_tag:
+    if do_auto_tag or queue_bg:
         try:
             redis = await create_pool(get_redis_settings())
             try:
-                full_image_path = f"{settings.storage_path}/{image_paths['image_path']}"
-                job = await redis.enqueue_job(
-                    "tag_item_image",
-                    str(item.id),
-                    full_image_path,
-                    _queue_name="arq:tagging",
-                )
-                item.ai_job_id = job.job_id
-                await db.commit()
-                await db.refresh(item, attribute_names=["updated_at"])
-                logger.info(f"Queued AI tagging job for item {item.id}")
+                if do_auto_tag:
+                    full_image_path = f"{settings.storage_path}/{image_paths['image_path']}"
+                    job = await redis.enqueue_job(
+                        "tag_item_image",
+                        str(item.id),
+                        full_image_path,
+                        _queue_name="arq:tagging",
+                    )
+                    item.ai_job_id = job.job_id
+                    await db.commit()
+                    await db.refresh(item, attribute_names=["updated_at"])
+                    logger.info(f"Queued AI tagging job for item {item.id}")
+                if queue_bg:
+                    await _enqueue_background_removal_job(
+                        redis, item.id, image_paths["image_path"]
+                    )
             finally:
                 await redis.aclose()
         except Exception as e:
-            logger.error(f"Failed to queue AI tagging job: {e}")
-    else:
+            logger.error(f"Failed to queue upload jobs: {e}")
+
+    if not do_auto_tag:
         item = await item_service.mark_pending(item, set_ready=True)
 
     return ItemResponse.model_validate(item)
@@ -236,9 +259,10 @@ async def bulk_create_items(
     failed = 0
 
     do_auto_tag = settings.effective_ai_vision_enabled and not skip_ai
+    queue_bg = _should_auto_background_removal()
 
     redis = None
-    if do_auto_tag:
+    if do_auto_tag or queue_bg:
         try:
             redis = await create_pool(get_redis_settings())
         except Exception as e:
@@ -316,6 +340,14 @@ async def bulk_create_items(
                         logger.info(f"Queued AI tagging for bulk item {item.id}")
                     except Exception as e:
                         logger.error(f"Failed to queue AI tagging for {item.id}: {e}")
+
+                if queue_bg and redis:
+                    try:
+                        await _enqueue_background_removal_job(
+                            redis, item.id, image_paths["image_path"]
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to queue background removal for {item.id}: {e}")
 
                 results.append(
                     BulkUploadResult(
@@ -495,6 +527,72 @@ async def bulk_analyze_items(
                 failed += 1
 
         await db.commit()
+    finally:
+        if redis:
+            await redis.aclose()
+
+    return BulkAnalyzeResponse(queued=queued, failed=failed, errors=errors)
+
+
+@router.post("/bulk/remove-background", response_model=BulkAnalyzeResponse)
+async def bulk_remove_background(
+    request: BulkAnalyzeRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkAnalyzeResponse:
+    if not is_background_removal_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background removal is not available",
+        )
+
+    item_service = ItemService(db)
+    queued = 0
+    failed = 0
+    errors: list[str] = []
+
+    if request.select_all:
+        item_ids = await item_service.get_ids_by_filter(
+            user_id=current_user.id,
+            type_filter=request.filters.type if request.filters else None,
+            search=request.filters.search if request.filters else None,
+            is_archived=request.filters.is_archived
+            if request.filters and request.filters.is_archived is not None
+            else False,
+            excluded_ids=list(request.excluded_ids) if request.excluded_ids else None,
+        )
+        logger.info("Bulk remove-background select_all: %d items", len(item_ids))
+    else:
+        item_ids = request.item_ids or []
+
+    items_to_process = []
+    for item_id in item_ids:
+        item = await item_service.get_by_id(item_id, current_user.id)
+        if not item:
+            errors.append(f"Item {item_id} not found or not owned by user")
+            failed += 1
+            continue
+        items_to_process.append(item)
+
+    redis = None
+    try:
+        redis = await create_pool(get_redis_settings())
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis for bulk remove-background: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to connect to job queue",
+        ) from None
+
+    try:
+        for item in items_to_process:
+            try:
+                await _enqueue_background_removal_job(redis, item.id, item.image_path)
+                queued += 1
+            except Exception as e:
+                logger.error(f"Failed to queue background removal for {item.id}: {e}")
+                errors.append(f"Failed to queue background removal for item {item.id}")
+                failed += 1
     finally:
         if redis:
             await redis.aclose()

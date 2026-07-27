@@ -80,3 +80,11 @@ def get_provider() -> BackgroundRemovalProvider:
         raise ValueError(f"Unknown BG_REMOVAL_PROVIDER: {provider_type}. Use 'rembg' or 'http'.")
 
     return _provider
+
+
+def is_background_removal_available() -> bool:
+    try:
+        get_provider()
+        return True
+    except Exception:
+        return False

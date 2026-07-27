@@ -6,15 +6,16 @@ working end-to-end (LAN access, AI tagging validated). See
 
 ## 1. Gallery UI port (from tandpfun/wardrobe)
 
-Frontend-only visual refresh of the wardrobe item grid/detail views to match
-tandpfun's cleaner, card-based gallery look.
+**Status: done** — wardrobe grid, item cards, item detail dialog, and a calmer
+sidebar/header shell. Thumbnails use the existing free `rembg` pipeline:
+automatic white-background cutouts on upload (`AUTO_BACKGROUND_REMOVAL`, default
+on) plus a bulk “clean up backgrounds” action in the wardrobe toolbar.
 
 - Scope: [`frontend/components`](../../frontend/components) — item cards, grid
-  layout, item detail dialog. No backend/data-model changes.
-- Approach: treat it as a design pass on existing components rather than a
-  rewrite — keep all current functionality (bulk actions, filters, wash
-  tracking badges, etc.), just restyle the presentation layer.
-- No dependency on any AI/API changes — safe to do at any time.
+  layout, item detail dialog, sidebar/header. Backend: arq job +
+  `POST /items/bulk/remove-background` (no data-model changes).
+- Paid OpenAI `gpt-image` product-shot regeneration (tandpfun import skill
+  style) remains **deferred** — see item 2 and [ai-setup.md](./ai-setup.md).
 
 ## 2. Virtual try-on proof of concept (from tandpfun/wardrobe)
 

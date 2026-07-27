@@ -1,15 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Search, Heart, Grid3X3, Loader2, AlertCircle, RefreshCw, Droplets, ArrowUpDown, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Search, Grid3X3, Loader2, AlertCircle, ArrowUpDown, SlidersHorizontal, X, Heart, Droplets } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -17,20 +13,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { ItemDetailDialog } from '@/components/item-detail-dialog';
 import { BulkActionToolbar, BulkSelection } from '@/components/bulk-action-toolbar';
-import { useItems, useItem, useItemTypes, useReanalyzeItem, useCancelAnalysis, useBulkDeleteItems, useBulkReanalyzeItems, BulkOperationParams } from '@/lib/hooks/use-items';
+import { ItemCard, ItemCardSkeleton } from '@/components/item-card';
+import { WardrobeCategoryNav } from '@/components/wardrobe-category-nav';
+import {
+  useItems,
+  useItem,
+  useItemTypes,
+  useReanalyzeItem,
+  useCancelAnalysis,
+  useBulkDeleteItems,
+  useBulkReanalyzeItems,
+  useBulkRemoveBackgroundItems,
+  BulkOperationParams,
+} from '@/lib/hooks/use-items';
+import { useFeatures } from '@/lib/hooks/use-features';
 import { useUserProfile } from '@/lib/hooks/use-user';
-import { CLOTHING_TYPES, CLOTHING_COLORS, Item } from '@/lib/types';
 import { toast } from 'sonner';
-import { formatWornAgo, getWornAgoColorClass } from '@/lib/utils';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -44,197 +45,6 @@ const SORT_OPTIONS = [
   { label: 'Name A–Z', value: 'name', order: 'asc' as const },
   { label: 'Name Z–A', value: 'name', order: 'desc' as const },
 ] as const;
-
-function ItemCard({
-  item,
-  selected,
-  onSelect,
-  onRetry,
-  onCancelAnalysis,
-  onClick,
-  onDismissError,
-  errorDismissed,
-  userTimezone,
-}: {
-  item: Item;
-  selected: boolean;
-  onSelect: (id: string, checked: boolean) => void;
-  onRetry?: (id: string) => void;
-  onCancelAnalysis?: (id: string) => void;
-  onClick?: () => void;
-  onDismissError?: (id: string) => void;
-  errorDismissed?: boolean;
-  userTimezone: string;
-}) {
-  const colorInfo = CLOTHING_COLORS.find((c) => c.value === item.primary_color);
-  const isProcessing = item.status === 'processing';
-  const isError = item.status === 'error' && !errorDismissed;
-
-  const handleCheckboxClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
-
-  return (
-    <Card
-      className={`group overflow-hidden cursor-pointer transition-all ${
-        selected ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'
-      }`}
-      onClick={onClick}
-    >
-      <div className="relative aspect-square bg-muted">
-        {item.thumbnail_url ? (
-          <Image
-            src={item.thumbnail_url}
-            alt={item.name || item.type}
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
-            {item.type}
-          </div>
-        )}
-        {/* Checkbox in top-left */}
-        <div
-          className={`absolute top-2 left-2 z-10 transition-opacity ${
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          onClick={handleCheckboxClick}
-        >
-          <Checkbox
-            checked={selected}
-            onCheckedChange={(checked) => onSelect(item.id, checked === true)}
-            className="bg-background/80 backdrop-blur-sm"
-          />
-        </div>
-        {item.favorite && (
-          <div className="absolute top-2 right-2 z-10">
-            <Heart className="h-4 w-4 fill-red-500 text-red-500" />
-          </div>
-        )}
-        {item.needs_wash && (
-          <div className="absolute bottom-2 right-2 z-10">
-            <div className="bg-amber-500/90 text-white rounded-full p-1" title="Needs washing">
-              <Droplets className="h-3.5 w-3.5" />
-            </div>
-          </div>
-        )}
-        {isProcessing && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
-            <Loader2 className="h-6 w-6 text-white animate-spin" />
-            <span className="text-white text-xs font-medium">AI Analyzing...</span>
-            {onCancelAnalysis && (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancelAnalysis(item.id);
-                }}
-              >
-                <X className="h-3 w-3 mr-1" />
-                Cancel
-              </Button>
-            )}
-          </div>
-        )}
-        {isError && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 p-2">
-            <AlertCircle className="h-6 w-6 text-red-400" />
-            <span className="text-white text-xs font-medium text-center">Analysis Failed</span>
-            <div className="flex gap-1.5">
-              {onRetry && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 text-xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRetry(item.id);
-                  }}
-                >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Retry
-                </Button>
-              )}
-              {onDismissError && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 w-7 p-0"
-                  title="Dismiss"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDismissError(item.id);
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-sm truncate">
-              {item.name || item.type}
-            </p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {item.type}
-              {item.subtype && ` • ${item.subtype}`}
-              {item.tags?.logprobs_confidence != null && ` · ${Math.round(item.tags.logprobs_confidence * 100)}% confident`}
-            </p>
-          </div>
-          {colorInfo && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className="w-4 h-4 rounded-full border shrink-0"
-                    style={{ backgroundColor: colorInfo.hex }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{colorInfo.name}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-        {item.last_worn_at ? (
-          <p className={`text-xs mt-1 ${getWornAgoColorClass(item.last_worn_at, userTimezone)}`}>
-            {formatWornAgo(item.last_worn_at, userTimezone)}
-          </p>
-        ) : item.wear_count > 0 ? (
-          <p className="text-xs text-muted-foreground mt-1">
-            Worn {item.wear_count} time{item.wear_count !== 1 ? 's' : ''}
-          </p>
-        ) : null}
-        {item.ai_confidence !== undefined && item.ai_confidence > 0 && item.status === 'ready' && (
-          <p className="text-xs text-muted-foreground mt-1">
-            AI completeness: {Math.round(item.ai_confidence * 100)}%
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ItemCardSkeleton() {
-  return (
-    <Card className="overflow-hidden">
-      <Skeleton className="aspect-square" />
-      <CardContent className="p-3">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/2 mt-1" />
-      </CardContent>
-    </Card>
-  );
-}
 
 function EmptyWardrobe({ onAddClick }: { onAddClick: () => void }) {
   return (
@@ -360,6 +170,8 @@ export default function WardrobePage() {
   const cancelAnalysis = useCancelAnalysis();
   const bulkDelete = useBulkDeleteItems();
   const bulkReanalyze = useBulkReanalyzeItems();
+  const bulkRemoveBackground = useBulkRemoveBackgroundItems();
+  const { data: features } = useFeatures();
 
   const items = data?.items || [];
   const total = data?.total || 0;
@@ -491,41 +303,57 @@ export default function WardrobePage() {
     }
   };
 
+  const handleBulkRemoveBackground = async () => {
+    const params = getBulkParams();
+    try {
+      const result = await bulkRemoveBackground.mutateAsync(params);
+      toast.success(`Queued ${result.queued} items for background cleanup`);
+      if (result.failed > 0) {
+        toast.error(`Failed to queue ${result.failed} items`);
+      }
+      handleClearSelection();
+    } catch {
+      toast.error('Failed to queue background cleanup');
+    }
+  };
+
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center justify-between sm:justify-start gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">My Wardrobe</h1>
-            <Button onClick={() => setAddDialogOpen(true)} className="sm:hidden" size="sm">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {total} item{total !== 1 ? 's' : ''} in your wardrobe
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            {total} {total === 1 ? 'piece' : 'pieces'}
           </p>
           {(processingCount > 0 || errorCount > 0) && (
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex flex-wrap items-center gap-2">
               {processingCount > 0 && (
-                <Badge variant="secondary" className="gap-1 text-xs">
+                <Badge variant="secondary" className="gap-1 text-xs font-normal">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   {processingCount} analyzing
                 </Badge>
               )}
               {errorCount > 0 && (
-                <Badge variant="destructive" className="gap-1 text-xs">
+                <Badge variant="destructive" className="gap-1 text-xs font-normal">
                   <AlertCircle className="h-3 w-3" />
                   {errorCount} failed
                 </Badge>
               )}
             </div>
           )}
+          <WardrobeCategoryNav
+            activeType={typeFilter}
+            onTypeChange={(value) => {
+              setTypeFilter(value);
+              setPage(1);
+            }}
+            itemTypes={itemTypes}
+          />
         </div>
-        <Button onClick={() => setAddDialogOpen(true)} className="hidden sm:flex">
+        <Button onClick={() => setAddDialogOpen(true)} className="hidden sm:inline-flex shrink-0">
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
@@ -547,6 +375,15 @@ export default function WardrobePage() {
             />
           </div>
           <div className="flex gap-2">
+            <Button
+              onClick={() => setAddDialogOpen(true)}
+              className="sm:hidden shrink-0"
+              size="icon"
+              variant="outline"
+              aria-label="Add item"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
             <Select
               value={String(sortIndex)}
               onValueChange={(v) => {
@@ -584,27 +421,7 @@ export default function WardrobePage() {
 
         {/* Expandable filter row */}
         {showFilters && (
-          <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg border bg-muted/30">
-            <Select
-              value={typeFilter}
-              onValueChange={(value) => {
-                setTypeFilter(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-[150px] h-8 text-xs">
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                {CLOTHING_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
+          <div className="flex flex-wrap gap-2 items-center p-3 rounded-md border border-border/80 bg-card/40">
             <Select
               value={String(pageSize)}
               onValueChange={(value) => {
@@ -684,7 +501,7 @@ export default function WardrobePage() {
           </Button>
         </div>
       ) : isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8">
           {Array.from({ length: 10 }).map((_, i) => (
             <ItemCardSkeleton key={i} />
           ))}
@@ -713,7 +530,7 @@ export default function WardrobePage() {
           <EmptyWardrobe onAddClick={() => setAddDialogOpen(true)} />
         )
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pb-20">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8 pb-20">
           {items.map((item) => {
             // Determine if item is selected based on selection mode
             const isSelected = selection.mode === 'all'
@@ -746,8 +563,10 @@ export default function WardrobePage() {
         onClear={handleClearSelection}
         onDelete={handleBulkDelete}
         onReanalyze={handleBulkReanalyze}
+        onRemoveBackground={features?.background_removal ? handleBulkRemoveBackground : undefined}
         isDeleting={bulkDelete.isPending}
         isReanalyzing={bulkReanalyze.isPending}
+        isRemovingBackground={bulkRemoveBackground.isPending}
         itemLabel="items"
         deleteWarningSuffix=" and their images"
         page={page}

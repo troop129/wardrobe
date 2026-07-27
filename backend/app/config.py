@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     bg_removal_model: str = Field(default="u2net")  # rembg model name
     bg_removal_url: str | None = Field(default=None)  # URL for http provider (e.g. withoutbg)
     bg_removal_api_key: str | None = Field(default=None)  # API key for http provider
+    auto_background_removal: bool = Field(default=True)
 
     # Image processing
     thumbnail_size: int = 400

@@ -343,3 +343,96 @@ class TestLogprobsRejection:
         assert content is None
         assert err is not None
         assert mock_post.call_count == 1
+
+
+class TestGenerateTextParamRejection:
+    """GPT-5.x/gpt-5.6 models reject legacy ``max_tokens`` and non-default
+    ``temperature``. Both must be retried away or outfit suggestions surface as
+    a misleading "AI service is not available" error.
+    """
+
+    @staticmethod
+    def _success_response() -> httpx.Response:
+        return _mock_response(
+            {
+                "model": "gpt-5.6-luna",
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": '{"outfits": []}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_retries_past_max_tokens_and_temperature_rejection(self):
+        service = AIService()
+        max_tokens_400 = _mock_response(
+            {
+                "error": {
+                    "message": (
+                        "Unsupported parameter: 'max_tokens' is not supported with this "
+                        "model. Use 'max_completion_tokens' instead."
+                    ),
+                    "param": "max_tokens",
+                    "code": "unsupported_parameter",
+                }
+            },
+            status_code=400,
+        )
+        temperature_400 = _mock_response(
+            {
+                "error": {
+                    "message": (
+                        "Unsupported value: 'temperature' does not support 0.4 with this "
+                        "model. Only the default (1) value is supported."
+                    ),
+                    "param": "temperature",
+                    "code": "unsupported_value",
+                }
+            },
+            status_code=400,
+        )
+        responses = [max_tokens_400, temperature_400, self._success_response()]
+
+        with patch("httpx.AsyncClient.post", side_effect=responses) as mock_post:
+            content = await service.generate_text("suggest an outfit")
+
+        assert content == '{"outfits": []}'
+        assert mock_post.call_count == 3
+        bodies = [call.kwargs["json"] for call in mock_post.call_args_list]
+        assert "max_tokens" in bodies[0]
+        assert bodies[0]["temperature"] == 0.4
+        assert "max_completion_tokens" in bodies[1]
+        assert bodies[1]["temperature"] == 0.4
+        assert "max_completion_tokens" in bodies[2]
+        assert "temperature" not in bodies[2]
+
+    @pytest.mark.asyncio
+    async def test_temperature_rejection_does_not_consume_retry_budget(self):
+        service = AIService()
+        service.settings = service.settings.model_copy(update={"ai_max_retries": 1})
+        temperature_400 = _mock_response(
+            {
+                "error": {
+                    "message": (
+                        "Unsupported value: 'temperature' does not support 0.4 with this "
+                        "model. Only the default (1) value is supported."
+                    ),
+                    "param": "temperature",
+                    "code": "unsupported_value",
+                }
+            },
+            status_code=400,
+        )
+        # Start as if max_tokens already adapted: first call still sends temperature,
+        # second succeeds without it — must work even with ai_max_retries=1.
+        responses = [temperature_400, self._success_response()]
+
+        with patch("httpx.AsyncClient.post", side_effect=responses) as mock_post:
+            content = await service.generate_text("suggest an outfit")
+
+        assert content == '{"outfits": []}'
+        assert mock_post.call_count == 2
+        assert "temperature" not in mock_post.call_args_list[1].kwargs["json"]

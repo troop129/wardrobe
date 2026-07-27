@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Trash2, RefreshCw, Loader2, CheckSquare, Square, MinusSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { X, Trash2, RefreshCw, Loader2, CheckSquare, Square, MinusSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -29,8 +29,10 @@ interface BulkActionToolbarProps {
   onClear: () => void;
   onDelete: () => void;
   onReanalyze?: () => void;
+  onRemoveBackground?: () => void;
   isDeleting?: boolean;
   isReanalyzing?: boolean;
+  isRemovingBackground?: boolean;
   itemLabel?: string;
   deleteWarningSuffix?: string;
   // Pagination props
@@ -48,8 +50,10 @@ export function BulkActionToolbar({
   onClear,
   onDelete,
   onReanalyze,
+  onRemoveBackground,
   isDeleting = false,
   isReanalyzing = false,
+  isRemovingBackground = false,
   itemLabel = 'items',
   deleteWarningSuffix = '',
   page,
@@ -154,6 +158,23 @@ export function BulkActionToolbar({
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          {onRemoveBackground && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={onRemoveBackground}
+              disabled={isRemovingBackground}
+              aria-label="Clean up backgrounds"
+              title="Clean up backgrounds"
+            >
+              {isRemovingBackground ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Eraser className="h-4 w-4" />
               )}
             </Button>
           )}

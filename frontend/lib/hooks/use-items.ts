@@ -740,6 +740,23 @@ export function useBulkReanalyzeItems() {
   });
 }
 
+export function useBulkRemoveBackgroundItems() {
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
+
+  return useMutation({
+    mutationFn: async (params: BulkOperationParams) => {
+      if (session?.accessToken) {
+        setAccessToken(session.accessToken as string);
+      }
+      return api.post<BulkAnalyzeResponse>('/items/bulk/remove-background', params);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+    },
+  });
+}
+
 function uploadBulkItemsChunk(
   files: File[],
   skipAi: boolean,
