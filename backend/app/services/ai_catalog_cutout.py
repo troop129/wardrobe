@@ -69,7 +69,7 @@ def build_catalog_prompt(chroma_rgb: tuple[int, int, int]) -> str:
         "buttons, zippers, hardware, and construction from the reference photo. "
         "Standardize the catalog angle instead of preserving the source camera angle: "
         "show garments front-on, upright, and centered; show footwear as a clean lateral "
-        "side profile with the toe pointing to the right; show bags and accessories straight-on. "
+        "side profile with the toe pointing to the left; show bags and accessories straight-on. "
         "Use that same view consistently across items in the same product class. "
         "For fabric items, make the presentation look freshly steamed or ironed by "
         "removing only incidental temporary creases; never airbrush, smooth away, or "
