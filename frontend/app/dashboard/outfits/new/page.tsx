@@ -40,6 +40,19 @@ import type { Item } from '@/lib/types';
 import { isWornImmutableError } from '@/lib/studio/errors';
 import { computeEditLoadPhase } from '@/lib/studio/edit-load';
 
+function localToday(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function defaultOutfitName(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export default function StudioEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -181,11 +194,6 @@ export default function StudioEditorPage() {
       toast.error('Pick at least one item');
       return;
     }
-    if (!state.occasion) {
-      toast.error('Pick an occasion');
-      return;
-    }
-
     if (isEditMode && editId) {
       try {
         await patchMutation.mutateAsync({
@@ -207,19 +215,13 @@ export default function StudioEditorPage() {
       return;
     }
 
-    if (!markWorn && !state.name.trim()) {
-      toast.error('Give your lookbook entry a name before saving');
-      return;
-    }
-
     try {
+      const today = localToday();
       await createMutation.mutateAsync({
         items: state.items.map((i) => i.id),
-        occasion: state.occasion,
-        name: state.name.trim() || undefined,
-        scheduled_for: markWorn
-          ? new Date().toISOString().slice(0, 10)
-          : null,
+        occasion: state.occasion || 'casual',
+        name: state.name.trim() || defaultOutfitName(today),
+        scheduled_for: markWorn ? today : null,
         mark_worn: markWorn,
       });
       clearDraft();
@@ -235,8 +237,7 @@ export default function StudioEditorPage() {
   };
 
   const mutationPending = isEditMode ? patchMutation.isPending : createMutation.isPending;
-  const canSave =
-    state.items.length > 0 && state.occasion !== null && !mutationPending;
+  const canSave = state.items.length > 0 && !mutationPending;
 
   const editPhase = isEditMode
     ? computeEditLoadPhase({
@@ -339,13 +340,13 @@ export default function StudioEditorPage() {
           </Link>
         </Button>
         <h1 className="text-lg font-semibold">
-          {isEditMode ? 'Edit outfit' : 'Outfit builder'}
+          {isEditMode ? 'Edit outfit' : 'What did you wear today?'}
         </h1>
         <div className="flex flex-col items-end">
           <div className="flex gap-2">
             {!isEditMode && (
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
                 disabled={!canSave}
                 onClick={() => handleSave(true)}
@@ -353,29 +354,28 @@ export default function StudioEditorPage() {
                 {mutationPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  'Wear Today'
+                  'Save today'
                 )}
               </Button>
             )}
-            <Button size="sm" disabled={!canSave} onClick={() => handleSave(false)}>
+            <Button
+              size="sm"
+              variant={isEditMode ? 'default' : 'outline'}
+              disabled={!canSave}
+              onClick={() => handleSave(false)}
+            >
               {mutationPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : isEditMode ? (
                 'Save Changes'
               ) : (
-                'Save to Lookbook'
+                'Save as look'
               )}
             </Button>
           </div>
           {!canSave && !mutationPending && (
             <p className="text-xs text-muted-foreground mt-1 text-right">
-              {state.items.length === 0 && state.occasion === null
-                ? 'Pick at least one item and an occasion'
-                : state.items.length === 0
-                  ? 'Pick at least one item'
-                  : state.occasion === null
-                    ? 'Pick an occasion'
-                    : ''}
+              {state.items.length === 0 ? 'Pick at least one item' : ''}
             </p>
           )}
         </div>
@@ -411,13 +411,11 @@ export default function StudioEditorPage() {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
-                Details
+                {isEditMode ? 'Details' : 'Optional details'}
               </h2>
               <DetailsPanel
                 items={state.items}
-                name={state.name}
                 occasion={state.occasion}
-                onNameChange={(n) => dispatch({ type: 'SET_NAME', name: n })}
                 onOccasionChange={(o) =>
                   dispatch({ type: 'SET_OCCASION', occasion: o })
                 }

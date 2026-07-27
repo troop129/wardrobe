@@ -208,7 +208,7 @@ class OutfitListResponse(BaseModel):
 
 
 class BulkOutfitFilters(BaseModel):
-    status_filter: str | None = None
+    status_filter: str | None = Field(None, alias="status")
     occasion: str | None = None
     date_from: date | None = None
     date_to: date | None = None

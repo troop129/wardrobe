@@ -123,6 +123,34 @@ class TestBulkDeleteSelectAll:
         assert remaining_ids == {worn.id}
 
     @pytest.mark.asyncio
+    async def test_deletes_only_pending_outfits_when_status_filter_is_used(
+        self, client: AsyncClient, test_user, auth_headers, db_session: AsyncSession
+    ):
+        item = _make_item(test_user.id)
+        db_session.add(item)
+        await db_session.flush()
+
+        pending = _make_outfit(test_user.id, [item], status=OutfitStatus.pending)
+        accepted = _make_outfit(test_user.id, [item], status=OutfitStatus.accepted)
+        db_session.add_all([pending, accepted])
+        await db_session.commit()
+        await db_session.refresh(pending)
+        await db_session.refresh(accepted)
+
+        response = await client.post(
+            "/api/v1/outfits/bulk/delete",
+            json={"select_all": True, "filters": {"status": "pending"}},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 1
+
+        remaining = await db_session.execute(select(Outfit).where(Outfit.user_id == test_user.id))
+        remaining_ids = {outfit.id for outfit in remaining.scalars().all()}
+        assert remaining_ids == {accepted.id}
+
+    @pytest.mark.asyncio
     async def test_select_all_respects_excluded_ids(
         self, client: AsyncClient, test_user, auth_headers, db_session: AsyncSession
     ):

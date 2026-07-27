@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OccasionChips } from '@/components/shared/occasion-chips';
 import { api, getErrorMessage } from '@/lib/api';
@@ -17,9 +16,7 @@ import type { Outfit, OutfitItem } from '@/lib/hooks/use-outfits';
 
 interface DetailsPanelProps {
   items: StudioItem[];
-  name: string;
   occasion: string | null;
-  onNameChange: (name: string) => void;
   onOccasionChange: (occasion: string) => void;
   onAiMerge: (merged: StudioItem[]) => void;
 }
@@ -67,9 +64,7 @@ function toStudioItem(item: OutfitItem): StudioItem {
 
 export function DetailsPanel({
   items,
-  name,
   occasion,
-  onNameChange,
   onOccasionChange,
   onAiMerge,
 }: DetailsPanelProps) {
@@ -77,14 +72,14 @@ export function DetailsPanel({
   const warnings = computeWarnings(items);
 
   const handleAiAssist = async () => {
-    if (items.length === 0 || !occasion) {
-      toast.error('Pick at least one item and an occasion first');
+    if (items.length === 0) {
+      toast.error('Pick at least one item first');
       return;
     }
     setAiLoading(true);
     try {
       const result = await api.post<Outfit>('/outfits/suggest', {
-        occasion,
+        occasion: occasion || 'casual',
         include_items: items.map((i) => i.id),
       });
 
@@ -118,32 +113,8 @@ export function DetailsPanel({
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="studio-name" className="flex items-center gap-1">
-          Name
-          <span className="text-xs text-muted-foreground font-normal ml-1">
-            (required for lookbook)
-          </span>
-        </Label>
-        <Input
-          id="studio-name"
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Friday brunch"
-          maxLength={100}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label className="flex items-center gap-1">
-          Occasion
-          <span className="text-destructive" aria-label="required">*</span>
-        </Label>
+        <Label>Occasion <span className="text-muted-foreground font-normal">(optional)</span></Label>
         <OccasionChips selected={occasion} onSelect={onOccasionChange} />
-        {!occasion && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Pick an occasion before saving.
-          </p>
-        )}
       </div>
 
       {warnings.length > 0 && (
@@ -165,7 +136,7 @@ export function DetailsPanel({
         type="button"
         variant="outline"
         className="w-full"
-        disabled={items.length === 0 || !occasion || aiLoading}
+        disabled={items.length === 0 || aiLoading}
         onClick={handleAiAssist}
       >
         {aiLoading ? (

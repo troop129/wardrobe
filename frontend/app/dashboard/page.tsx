@@ -1,11 +1,21 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Shirt,
   Sparkles,
@@ -32,7 +42,7 @@ import { useAnalytics } from '@/lib/hooks/use-analytics';
 import { useWeather } from '@/lib/hooks/use-weather';
 import { usePreferences } from '@/lib/hooks/use-preferences';
 import { displayValue, tempSymbol, TempUnit } from '@/lib/temperature';
-import { usePendingOutfits, useAcceptOutfit, useRejectOutfit } from '@/lib/hooks/use-outfits';
+import { usePendingOutfits, useAcceptOutfit, useRejectOutfit, useBulkDeleteOutfits } from '@/lib/hooks/use-outfits';
 import { useSchedules, useNotificationSettings } from '@/lib/hooks/use-notifications';
 import { useFamily } from '@/lib/hooks/use-family';
 import { toast } from 'sonner';
@@ -119,6 +129,8 @@ function PendingOutfitsCard() {
   const { data, isLoading } = usePendingOutfits(2);
   const acceptOutfit = useAcceptOutfit();
   const rejectOutfit = useRejectOutfit();
+  const clearPending = useBulkDeleteOutfits();
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   const handleAccept = async (id: string) => {
     try {
@@ -135,6 +147,18 @@ function PendingOutfitsCard() {
       toast.success('Outfit dismissed');
     } catch {
       toast.error('Failed to dismiss outfit');
+    }
+  };
+
+  const handleClearPending = async () => {
+    try {
+      const result = await clearPending.mutateAsync({
+        select_all: true,
+        filters: { status: 'pending' },
+      });
+      toast.success(`Cleared ${result.deleted} pending outfit${result.deleted === 1 ? '' : 's'}`);
+    } catch {
+      toast.error('Failed to clear pending outfits');
     }
   };
 
@@ -176,6 +200,7 @@ function PendingOutfitsCard() {
   }
 
   return (
+    <>
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -184,11 +209,15 @@ function PendingOutfitsCard() {
             Pending Outfits
             <Badge variant="secondary" className="ml-1">{data?.total || pendingOutfits.length}</Badge>
           </CardTitle>
-          {(data?.total ?? 0) > 2 && (
-            <Link href="/dashboard/history" className="text-xs text-muted-foreground hover:text-foreground">
-              View all
-            </Link>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+            onClick={() => setClearDialogOpen(true)}
+            disabled={clearPending.isPending}
+          >
+            Clear all
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -251,6 +280,21 @@ function PendingOutfitsCard() {
         ))}
       </CardContent>
     </Card>
+    <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Clear pending outfits?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes every outfit that is still waiting for your response.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep them</AlertDialogCancel>
+          <AlertDialogAction onClick={handleClearPending}>Clear pending outfits</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
