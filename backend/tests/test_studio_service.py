@@ -74,6 +74,7 @@ async def test_create_from_scratch(db_session, studio_user, wardrobe_items):
     assert outfit.name == "Test outfit"
     assert outfit.occasion == "casual"
     assert outfit.scheduled_for is None
+    assert outfit.status == OutfitStatus.accepted
     assert len(outfit.items) == 3
     assert outfit.feedback is not None
     assert outfit.feedback.accepted is True
@@ -97,6 +98,7 @@ async def test_create_from_scratch_mark_worn(db_session, studio_user, wardrobe_i
     await db_session.commit()
 
     assert outfit.feedback.worn_at == today
+    assert outfit.status == OutfitStatus.accepted
 
     await db_session.refresh(shirt)
     assert shirt.wear_count == 1
@@ -225,6 +227,7 @@ async def test_wear_today(db_session, studio_user, wardrobe_items):
 
     assert wear.scheduled_for == today
     assert wear.cloned_from_outfit_id == template.id
+    assert wear.status == OutfitStatus.accepted
     assert len(wear.items) == 3
 
     await db_session.refresh(shirt)

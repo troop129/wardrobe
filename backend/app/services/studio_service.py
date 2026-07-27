@@ -151,7 +151,9 @@ class StudioService:
             occasion=occasion,
             scheduled_for=scheduled_for,
             source=OutfitSource.manual,
-            status=OutfitStatus.pending,
+            # A manually saved outfit is already the owner's choice. Only AI-generated
+            # suggestions should wait for an accept/reject decision.
+            status=OutfitStatus.accepted,
             name=name,
             source_item_id=source_item_id,
         )
@@ -214,7 +216,7 @@ class StudioService:
             occasion=original.occasion,
             scheduled_for=effective_date,
             source=OutfitSource.manual,
-            status=OutfitStatus.pending,
+            status=OutfitStatus.accepted,
             replaces_outfit_id=original.id,
             name=f"{occasion_label} (wore instead)",
         )
@@ -282,7 +284,7 @@ class StudioService:
             occasion=source.occasion,
             scheduled_for=None,
             source=OutfitSource.manual,
-            status=OutfitStatus.pending,
+            status=OutfitStatus.accepted,
             cloned_from_outfit_id=source.id,
             source_item_id=source.source_item_id,
             name=name,
@@ -328,7 +330,7 @@ class StudioService:
             occasion=template.occasion,
             scheduled_for=target_date,
             source=OutfitSource.manual,
-            status=OutfitStatus.pending,
+            status=OutfitStatus.accepted,
             cloned_from_outfit_id=template.id,
             source_item_id=template.source_item_id,
             name=template.name,

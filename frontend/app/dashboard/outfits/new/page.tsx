@@ -430,10 +430,10 @@ export default function StudioEditorPage() {
             <h2 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
               Your Wardrobe
             </h2>
-            <ItemPicker
-              selectedIds={selectedIds}
-              onToggle={handleToggle}
-              hideNeedsWash={true}
+              <ItemPicker
+                selectedIds={selectedIds}
+                onToggle={handleToggle}
+                hideNeedsWash={false}
               emptyMessage="No items in your wardrobe yet. Add items first."
               heightClass="h-[280px]"
             />
