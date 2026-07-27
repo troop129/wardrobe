@@ -23,21 +23,9 @@
   <a href="#contributing">Contributing</a>
 </p>
 
-<p align="center">
-  <a href="https://buymeacoffee.com/anyesh">
-    <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee">
-  </a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Google%20Play-Coming%20Soon-34A853?style=for-the-badge&logo=googleplay&logoColor=white" alt="Google Play - Coming Soon">
-  &nbsp;
-  <a href="https://apps.apple.com/us/app/wardrowbe/id6759947671">
-    <img src="https://img.shields.io/badge/App%20Store-0D96F6?style=for-the-badge&logo=appstore&logoColor=white" alt="App Store">
-  </a>
-</p>
-
 Self-hosted wardrobe management with AI-powered outfit recommendations. Take photos of your clothes, let AI tag them, and get daily outfit suggestions based on weather and occasion.
+
+> This is a personal fork ([troop129/wardrobe](https://github.com/troop129/wardrobe)) of the upstream [Anyesh/wardrowbe](https://github.com/Anyesh/wardrowbe) project, self-hosted on a home Windows PC. See [docs/homelab](docs/homelab/README.md) for the setup plan, hardware notes, and remote-access/deployment runbooks specific to this deployment.
 
 ## Features
 
@@ -103,8 +91,8 @@ Get your API key from https://platform.openai.com/api-keys
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/wardrowbe.git
-cd wardrowbe
+git clone https://github.com/troop129/wardrobe.git
+cd wardrobe
 
 # Copy environment template
 cp .env.example .env
@@ -297,14 +285,11 @@ publishes `backend-<version>` / `frontend-<version>` (e.g. `backend-1.3.0`). To
 pin a deployment to a specific release, replace the `-latest` tags in the
 compose file with the version, e.g. `ghcr.io/anyesh/wardrowbe:backend-1.3.0`.
 
-### Kubernetes
-
-See the [k8s/](k8s/) directory for Kubernetes manifests including:
-- PostgreSQL and Redis with persistent storage
-- Backend API and worker deployments
-- Next.js frontend
-- Ingress with TLS
-- Network policies
+> Kubernetes manifests from the upstream project were removed in this fork
+> since this deployment runs on a single Windows host via Docker Compose — see
+> [docs/homelab/deployment.md](docs/homelab/deployment.md) for the actual
+> runbook used here. If you need k8s manifests, they're still available in
+> [upstream](https://github.com/Anyesh/wardrowbe/tree/main/k8s).
 
 ## Configuration
 
@@ -561,34 +546,12 @@ docker compose exec redis redis-cli ping
 
 ### Getting Help
 
-If you're still stuck:
-1. Check existing [GitHub Issues](https://github.com/yourusername/wardrowbe/issues)
-2. Search [Discussions](https://github.com/yourusername/wardrowbe/discussions)
-3. Create a new issue with:
-   - Output of `docker compose ps`
-   - Relevant logs from `docker compose logs`
-   - Your .env configuration (redact secrets!)
-   - Steps to reproduce the problem
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=Anyesh%2Fwardrowbe&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Anyesh/wardrowbe&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Anyesh/wardrowbe&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Anyesh/wardrowbe&type=date&legend=top-left" />
- </picture>
-</a>
- 
-## Support
-
-If you find wardrowbe useful, consider supporting its development:
-
-<a href="https://buymeacoffee.com/anyesh"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee"></a>
+This is a personal deployment, not a community-supported fork. If something's
+broken, check [docs/homelab](docs/homelab/README.md) first (deployment runbook,
+remote-access notes, AI setup), then the upstream project's
+[GitHub Issues](https://github.com/Anyesh/wardrowbe/issues) /
+[Discussions](https://github.com/Anyesh/wardrowbe/discussions) for anything
+that isn't deployment-specific to this fork.
 
 ## License
 
