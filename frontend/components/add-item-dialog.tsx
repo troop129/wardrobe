@@ -143,12 +143,13 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
     try {
       const created = await createItem.mutateAsync(formData);
       if (notes.trim()) {
-        await itemAssistant.mutateAsync({ id: created.id, message: notes.trim() });
-        toast.success('Item added and your details were saved');
+        const result = await itemAssistant.mutateAsync({ id: created.id, message: notes.trim() });
+        toast.success(result.summary || 'Item added and your details were saved');
       }
       handleClose();
     } catch (error) {
       console.error('Failed to create item:', error);
+      toast.error(error instanceof Error ? error.message : 'Could not save those details');
     }
   };
 
@@ -359,17 +360,17 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Tell us about this item <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Label htmlFor="notes">Tell Wardrowbe more <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <p className="text-xs text-muted-foreground">
+                    Share fit, fabric, care, or what you like to wear it with. We&apos;ll save the useful details to this item.
+                  </p>
                   <Textarea
                     id="notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Fit, fabric, care, what you like to wear it with…"
+                    placeholder="e.g. H&M oversized and soft, but low cut. Keep it clean and pair it with dark jeans."
                     rows={3}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Your details are saved with the item. After upload, use “Tell Wardrowbe more” to turn them into tags too.
-                  </p>
                 </div>
               </div>
 

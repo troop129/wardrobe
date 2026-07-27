@@ -82,6 +82,12 @@ interface ItemDetailDialogProps {
 
 // Images now use signed URLs from backend (item.image_url, item.thumbnail_url)
 
+type ImageJob = {
+  kind: 'ai_catalog' | 'cleanup' | 'analyze';
+  label: string;
+  progress: number;
+};
+
 export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -100,12 +106,14 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const [showWashHistory, setShowWashHistory] = useState(false);
   const [showWearHistory, setShowWearHistory] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [imageJob, setImageJob] = useState<{
-    kind: 'ai_catalog' | 'cleanup' | 'analyze';
-    label: string;
-    progress: number;
-  } | null>(null);
-  const cleanupProgressRef = useRef<number | null>(null);
+  const [imageJobs, setImageJobs] = useState<Record<string, ImageJob>>({});
+  // Catalog cutouts do not change ClothingItem.status. Remembering a completed
+  // catalog job prevents an older tagging `processing` status from recreating
+  // the generic analysis overlay after the cutout has finished.
+  const [catalogCutoutItemIds, setCatalogCutoutItemIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const cleanupProgressRef = useRef<Record<string, number>>({});
   const [assistantMessage, setAssistantMessage] = useState('');
 
   const updateItem = useUpdateItem();
@@ -126,6 +134,21 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const addImage = useAddItemImage();
   const deleteImage = useDeleteItemImage();
   const setPrimary = useSetPrimaryImage();
+  const imageJob = item ? imageJobs[item.id] : undefined;
+
+  const setImageJobForItem = (
+    itemId: string,
+    job: ImageJob | null | ((previous: ImageJob | undefined) => ImageJob | null)
+  ) => {
+    setImageJobs((previous) => {
+      const next = typeof job === 'function' ? job(previous[itemId]) : job;
+      if (!next) {
+        const { [itemId]: _completedJob, ...remaining } = previous;
+        return remaining;
+      }
+      return { ...previous, [itemId]: next };
+    });
+  };
 
   useEffect(() => {
     if (item) {
@@ -208,8 +231,14 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const handleReanalyze = async () => {
+    const itemId = activeItem.id;
+    setCatalogCutoutItemIds((previous) => {
+      const next = new Set(previous);
+      next.delete(itemId);
+      return next;
+    });
     try {
-      await reanalyzeItem.mutateAsync(activeItem.id);
+      await reanalyzeItem.mutateAsync(itemId);
       // Status will update to 'processing' and UI will reflect it
     } catch (error) {
       console.error('Failed to trigger re-analysis:', error);
@@ -228,37 +257,40 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const handleRemoveBackground = async () => {
-    setImageJob({ kind: 'cleanup', label: 'Cleaning up background…', progress: 8 });
-    if (cleanupProgressRef.current) window.clearInterval(cleanupProgressRef.current);
-    cleanupProgressRef.current = window.setInterval(() => {
-      setImageJob((prev) =>
+    const itemId = activeItem.id;
+    setImageJobForItem(itemId, { kind: 'cleanup', label: 'Cleaning up background…', progress: 8 });
+    if (cleanupProgressRef.current[itemId]) window.clearInterval(cleanupProgressRef.current[itemId]);
+    cleanupProgressRef.current[itemId] = window.setInterval(() => {
+      setImageJobForItem(itemId, (prev) =>
         prev?.kind === 'cleanup'
           ? { ...prev, progress: Math.min(92, prev.progress + 6) }
-          : prev
+          : null
       );
     }, 400);
     try {
-      await removeBackground.mutateAsync({ id: activeItem.id });
+      await removeBackground.mutateAsync({ id: itemId });
       setImageKey((k) => k + 1);
-      setImageJob({ kind: 'cleanup', label: 'Background cleaned', progress: 100 });
+      setImageJobForItem(itemId, { kind: 'cleanup', label: 'Background cleaned', progress: 100 });
       toast.success('Background removed');
     } catch (error) {
       console.error('Failed to remove background:', error);
       toast.error('Failed to remove background');
     } finally {
-      if (cleanupProgressRef.current) {
-        window.clearInterval(cleanupProgressRef.current);
-        cleanupProgressRef.current = null;
+      if (cleanupProgressRef.current[itemId]) {
+        window.clearInterval(cleanupProgressRef.current[itemId]);
+        delete cleanupProgressRef.current[itemId];
       }
-      setTimeout(() => setImageJob(null), 500);
+      window.setTimeout(() => setImageJobForItem(itemId, null), 500);
     }
   };
 
   const handleAiCatalogCutout = async () => {
-    setImageJob({ kind: 'ai_catalog', label: 'Starting AI catalog cutout…', progress: 4 });
+    const itemId = activeItem.id;
+    setCatalogCutoutItemIds((previous) => new Set(previous).add(itemId));
+    setImageJobForItem(itemId, { kind: 'ai_catalog', label: 'Starting AI catalog cutout…', progress: 4 });
     try {
       await aiCatalogCutout.mutateAsync({
-        id: activeItem.id,
+        id: itemId,
         onProgress: (status) => {
           const mapped =
             status.status === 'queued' || status.status === 'deferred'
@@ -270,15 +302,17 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                   : { label: 'Preparing AI catalog cutout…', progress: 18 };
           // ARQ can report a stale queued/deferred status after the worker has
           // started. Keep this visual progress monotonic so it never jumps back.
-          setImageJob((prev) =>
+          setImageJobForItem(itemId, (prev) =>
             prev?.kind === 'ai_catalog' && prev.progress >= mapped.progress
               ? prev
-              : { kind: 'ai_catalog', ...mapped }
+              : prev?.kind === 'ai_catalog'
+                ? { kind: 'ai_catalog', ...mapped }
+                : null
           );
         },
       });
       setImageKey((k) => k + 1);
-      setImageJob({ kind: 'ai_catalog', label: 'Catalog cutout ready', progress: 100 });
+      setImageJobForItem(itemId, { kind: 'ai_catalog', label: 'Catalog cutout ready', progress: 100 });
       toast.success('AI catalog cutout complete');
     } catch (error) {
       console.error('Failed to run AI catalog cutout:', error);
@@ -286,7 +320,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     } finally {
       // The mutation only resolves after the final image is written. Clear the
       // overlay here instead of relying on a timer that can be delayed on mobile.
-      setImageJob((prev) => (prev?.kind === 'ai_catalog' ? null : prev));
+      setImageJobForItem(itemId, (prev) => (prev?.kind === 'ai_catalog' ? null : prev ?? null));
     }
   };
 
@@ -325,52 +359,51 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     }
   };
 
-  const isAnalyzing = reanalyzeItem.isPending || item?.status === 'processing';
+  const isAnalyzing = item?.status === 'processing' && !catalogCutoutItemIds.has(item.id);
   const hasActiveImageJob = !!imageJob && imageJob.progress < 100;
-  const isImageBusy =
-    hasActiveImageJob || removeBackground.isPending || aiCatalogCutout.isPending || isAnalyzing;
+  const isImageBusy = hasActiveImageJob || isAnalyzing;
 
   // Soft progress while AI tagging is processing (no fine-grained job %).
   useEffect(() => {
     if (!isAnalyzing) {
-      setImageJob((prev) => (prev?.kind === 'analyze' ? null : prev));
+      if (item) setImageJobForItem(item.id, (prev) => (prev?.kind === 'analyze' ? null : prev ?? null));
       return;
     }
-    if (aiCatalogCutout.isPending || removeBackground.isPending) {
+    if (!item || imageJob?.kind === 'ai_catalog' || imageJob?.kind === 'cleanup') {
       return;
     }
-    setImageJob((prev) =>
-      prev?.kind === 'ai_catalog' || prev?.kind === 'cleanup'
-        ? prev
-        : { kind: 'analyze', label: 'AI analyzing…', progress: 18 }
+    const itemId = item.id;
+    setImageJobForItem(itemId, (prev) =>
+      prev ?? { kind: 'analyze', label: 'AI analyzing…', progress: 18 }
     );
     const id = window.setInterval(() => {
-      setImageJob((prev) =>
+      setImageJobForItem(itemId, (prev) =>
         prev?.kind === 'analyze'
           ? { ...prev, progress: Math.min(88, prev.progress + 3) }
-          : prev
+          : null
       );
     }, 800);
     return () => window.clearInterval(id);
-  }, [isAnalyzing, aiCatalogCutout.isPending, removeBackground.isPending]);
+  }, [isAnalyzing, item?.id, imageJob?.kind]);
 
   // While the OpenAI edit is in_progress, ease the bar forward so it doesn't feel stuck.
   useEffect(() => {
-    if (!aiCatalogCutout.isPending || imageJob?.kind !== 'ai_catalog') return;
+    if (!item || imageJob?.kind !== 'ai_catalog') return;
     if ((imageJob.progress ?? 0) < 20 || (imageJob.progress ?? 0) >= 90) return;
+    const itemId = item.id;
     const id = window.setInterval(() => {
-      setImageJob((prev) =>
+      setImageJobForItem(itemId, (prev) =>
         prev?.kind === 'ai_catalog' && prev.progress >= 20 && prev.progress < 90
           ? {
               ...prev,
               label: 'Generating catalog cutout…',
               progress: Math.min(90, prev.progress + 2),
             }
-          : prev
+          : null
       );
     }, 1500);
     return () => window.clearInterval(id);
-  }, [aiCatalogCutout.isPending, imageJob?.kind]);
+  }, [item?.id, imageJob?.kind, imageJob?.progress]);
 
   if (!item) return null;
 
@@ -468,7 +501,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       onClick={handleRemoveBackground}
                       disabled={isImageBusy || !item.image_url}
                     >
-                      {removeBackground.isPending ? (
+                      {imageJob?.kind === 'cleanup' && hasActiveImageJob ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Eraser className="h-4 w-4" />
@@ -481,7 +514,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       onClick={handleAiCatalogCutout}
                       disabled={isImageBusy || !item.image_url}
                     >
-                      {aiCatalogCutout.isPending ? (
+                      {imageJob?.kind === 'ai_catalog' && hasActiveImageJob ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Wand2 className="h-4 w-4" />
@@ -590,9 +623,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       {imageJob?.label ||
                         (isAnalyzing
                           ? 'AI Analyzing…'
-                          : removeBackground.isPending
-                            ? 'Cleaning up background…'
-                            : 'Generating catalog cutout…')}
+                          : 'Working on image…')}
                     </span>
                     <div className="w-full max-w-[220px]">
                       <Progress
@@ -1074,13 +1105,19 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                     </div>
                   )}
 
-                  {/* Notes */}
+                  {/* Tell Wardrowbe more — same assistant as add-item notes */}
                   <div className="space-y-2 pt-2 border-t">
+                    <div>
+                      <p className="text-sm font-medium">Tell Wardrowbe more</p>
+                      <p className="text-xs text-muted-foreground">
+                        Share fit, fabric, care, or what you like to wear it with. We&apos;ll save the useful details to this item.
+                      </p>
+                    </div>
                     <Textarea
                       value={assistantMessage}
                       onChange={(event) => setAssistantMessage(event.target.value)}
-                      placeholder="Add details about this item…"
-                      rows={2}
+                      placeholder="e.g. H&M oversized and soft, but low cut. Keep it clean and pair it with dark jeans."
+                      rows={3}
                       disabled={itemAssistant.isPending}
                     />
                     <Button
