@@ -53,8 +53,14 @@ class Settings(BaseSettings):
     ai_text_enabled: bool | None = Field(default=None)
 
     # AI Service (OpenAI-compatible API - supports Ollama, OpenAI, etc.)
+    # ai_base_url/ai_api_key is the default provider, used for text and as the
+    # vision fallback when ai_vision_base_url is unset. This lets vision and text
+    # point at different providers (e.g. OpenAI for vision quality, local Ollama
+    # for frequent text generation) without needing a proxy in front.
     ai_base_url: str = Field(default="")
     ai_api_key: str | None = Field(default=None)
+    ai_vision_base_url: str | None = Field(default=None)
+    ai_vision_api_key: str | None = Field(default=None)
     ai_vision_model: str = Field(default="gpt-4o")  # comma-separated for model rotation
     ai_text_model: str = Field(default="gpt-4o")  # comma-separated for model rotation
     ai_timeout: int = Field(default=120)

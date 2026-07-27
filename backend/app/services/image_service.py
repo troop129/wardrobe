@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 import imagehash
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.config import get_settings
 from app.services import background_removal
@@ -111,6 +111,11 @@ class ImageService:
         else:
             image = Image.open(BytesIO(image_data))
 
+        # Auto-orient based on EXIF (phones/cameras store rotation as metadata
+        # rather than baking it into pixel data; without this every stored size
+        # - and the AI's view of the item - can come out sideways/upside-down).
+        image = ImageOps.exif_transpose(image)
+
         # Generate base filename
         base_filename = self._generate_filename(".jpg")
         base_name = base_filename.rsplit(".", 1)[0]
@@ -196,6 +201,10 @@ class ImageService:
         else:
             image = Image.open(BytesIO(image_data))
 
+        # Auto-orient based on EXIF so the hash reflects the image as actually
+        # displayed, not however it happened to be stored on the sensor.
+        image = ImageOps.exif_transpose(image)
+
         # Convert to RGB if needed for consistent hashing
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -207,6 +216,7 @@ class ImageService:
     def compute_phash_from_path(self, image_path: Path) -> str:
         """Compute pHash from a file path."""
         image = Image.open(image_path)
+        image = ImageOps.exif_transpose(image)
         if image.mode != "RGB":
             image = image.convert("RGB")
         phash = imagehash.phash(image)

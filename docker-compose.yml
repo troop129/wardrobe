@@ -35,7 +35,8 @@ services:
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/anyesh/wardrowbe:backend-latest
+    build:
+      context: ./backend
     container_name: wardrobe-backend
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -53,6 +54,9 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       AUTH_TRUST_HEADER: ${AUTH_TRUST_HEADER:-false}
       AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:11434/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_VISION_BASE_URL: ${AI_VISION_BASE_URL:-}
+      AI_VISION_API_KEY: ${AI_VISION_API_KEY:-}
       AI_VISION_MODEL: ${AI_VISION_MODEL:-gpt-4o}
       AI_TEXT_MODEL: ${AI_TEXT_MODEL:-gpt-4o}
       AI_TIMEOUT: ${AI_TIMEOUT:-120}
@@ -81,7 +85,8 @@ services:
 
   # Next.js Frontend
   frontend:
-    image: ghcr.io/anyesh/wardrowbe:frontend-latest
+    build:
+      context: ./frontend
     container_name: wardrobe-frontend
     environment:
       # NEXT_PUBLIC_API_URL is the pre-1.6 name, still honored so existing .env files keep working.
@@ -99,7 +104,8 @@ services:
 
 # Background Worker for AI Tagging
   worker:
-    image: ghcr.io/anyesh/wardrowbe:backend-latest
+    build:
+      context: ./backend
     container_name: wardrobe-worker
     command: arq app.workers.worker.WorkerSettings
     extra_hosts:
@@ -110,6 +116,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wardrobe}:${POSTGRES_PASSWORD:-wardrobe}@postgres:5432/${POSTGRES_DB:-wardrobe}
       REDIS_URL: redis://redis:6379/0
       AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:11434/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_VISION_BASE_URL: ${AI_VISION_BASE_URL:-}
+      AI_VISION_API_KEY: ${AI_VISION_API_KEY:-}
       AI_VISION_MODEL: ${AI_VISION_MODEL:-gpt-4o}
       AI_TEXT_MODEL: ${AI_TEXT_MODEL:-gpt-4o}
       AI_TIMEOUT: ${AI_TIMEOUT:-120}

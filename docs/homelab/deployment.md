@@ -101,8 +101,16 @@ defaults.
 
 ## 4. Start the stack — ✅ done
 
+> **Updated**: `backend`/`worker`/`frontend` now `build:` from this repo's
+> source (see [ai-setup.md](./ai-setup.md#quality-decision-mixed-provider-openai-vision--local-text))
+> instead of pulling prebuilt `ghcr.io/anyesh/wardrowbe` images, so local fixes
+> (e.g. the EXIF-orientation fix, AI provider changes) actually take effect.
+> Pull the latest source (`git pull`) and run `docker compose build` before
+> `up -d` whenever the fork changes, instead of `docker compose pull`.
+
 ```powershell
-docker compose pull
+git pull
+docker compose build
 docker compose up -d
 docker compose exec backend alembic upgrade head
 ```

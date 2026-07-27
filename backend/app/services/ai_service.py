@@ -173,6 +173,18 @@ def _response_rejects_logprobs(response: httpx.Response) -> bool:
     return response.status_code == 400 and "logprobs" in response.text.lower()
 
 
+def _response_rejects_max_tokens(response: httpx.Response) -> bool:
+    """Newer OpenAI models (e.g. the gpt-5.x/gpt-5.6 family) reject the legacy
+    ``max_tokens`` param outright and require ``max_completion_tokens`` instead.
+    Detected generically off the error body rather than by model name, since the
+    same base_url can be repointed at different model generations over time."""
+    return (
+        response.status_code == 400
+        and "max_tokens" in response.text.lower()
+        and "max_completion_tokens" in response.text.lower()
+    )
+
+
 _CONFIDENCE_FIELDS = {"type", "primary_color", "pattern", "material", "formality"}
 
 
@@ -235,7 +247,14 @@ def compute_confidence_from_logprobs(logprobs_content: list[dict] | None) -> flo
 
 
 class AIEndpointConfig:
-    """Configuration for an AI endpoint."""
+    """Configuration for an AI endpoint.
+
+    ``url``/``api_key`` are used for text generation and as the vision fallback.
+    ``vision_url``/``vision_api_key`` optionally override those for vision calls only,
+    so a single endpoint entry can point vision (e.g. OpenAI, for one-shot tagging
+    quality) and text (e.g. local Ollama, for frequent suggestions) at different
+    providers without a proxy in front.
+    """
 
     def __init__(
         self,
@@ -244,12 +263,18 @@ class AIEndpointConfig:
         text_model: str = "phi3:mini",
         name: str = "default",
         enabled: bool = True,
+        vision_url: str | None = None,
+        vision_api_key: str | None = None,
+        api_key: str | None = None,
     ):
         self.url = url
         self.vision_model = vision_model
         self.text_model = text_model
         self.name = name
         self.enabled = enabled
+        self.vision_url = vision_url or url
+        self.api_key = api_key
+        self.vision_api_key = vision_api_key or api_key
 
 
 class AIService:
@@ -297,6 +322,9 @@ class AIService:
                 vision_model=self.settings.ai_vision_model,
                 text_model=self.settings.ai_text_model,
                 name="default",
+                api_key=self.settings.ai_api_key,
+                vision_url=self.settings.ai_vision_base_url,
+                vision_api_key=self.settings.ai_vision_api_key,
             )
         )
 
@@ -305,11 +333,12 @@ class AIService:
         self.vision_model = self._endpoints[0].vision_model
         self.text_model = self._endpoints[0].text_model
 
-    def _get_headers(self) -> dict:
+    def _get_headers(self, api_key: str | None = None) -> dict:
         """Get headers for AI API requests, including auth if configured."""
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        key = api_key if api_key is not None else self.api_key
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
         return headers
 
     def _preprocess_image(self, image_path: str | Path) -> str:
@@ -325,8 +354,10 @@ class AIService:
             # Auto-orient based on EXIF
             img = ImageOps.exif_transpose(img)
 
-            # Resize to max 512x512 for faster AI processing
-            max_size = 512
+            # Resize to max 1024x1024 - large enough to preserve fine detail
+            # (fabric texture, pocket/subtype cues, graphics) that a 512px
+            # downscale was losing, without materially increasing vision cost.
+            max_size = 1024
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
             # Convert to JPEG bytes
@@ -455,25 +486,31 @@ class AIService:
         for endpoint in self._endpoints:
             logger.info(f"Trying AI endpoint for {task_name}: {endpoint.name}")
             model = endpoint.vision_model if use_vision_model else endpoint.text_model
+            base_url = endpoint.vision_url if use_vision_model else endpoint.url
+            api_key = endpoint.vision_api_key if use_vision_model else endpoint.api_key
             use_logprobs = request_logprobs
+            use_max_completion_tokens = False
 
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 attempt = 0
                 while attempt < self.settings.ai_max_retries:
                     try:
+                        token_param = (
+                            "max_completion_tokens" if use_max_completion_tokens else "max_tokens"
+                        )
                         request_body = {
                             "model": model,
                             "messages": messages,
                             "stream": False,
-                            "max_tokens": self.settings.ai_max_tokens,
+                            token_param: self.settings.ai_max_tokens,
                         }
                         if use_logprobs:
                             request_body["logprobs"] = True
                             request_body["top_logprobs"] = 3
 
                         response = await client.post(
-                            f"{endpoint.url}/chat/completions",
-                            headers=self._get_headers(),
+                            f"{base_url}/chat/completions",
+                            headers=self._get_headers(api_key),
                             json=request_body,
                         )
                         response.raise_for_status()
@@ -506,6 +543,15 @@ class AIService:
                                 f"retrying without it: {e}"
                             )
                             use_logprobs = False
+                            continue
+                        if not use_max_completion_tokens and _response_rejects_max_tokens(
+                            e.response
+                        ):
+                            logger.warning(
+                                f"{endpoint.name} rejected max_tokens for {task_name}, "
+                                f"retrying with max_completion_tokens: {e}"
+                            )
+                            use_max_completion_tokens = True
                             continue
                         last_error = e
                         logger.warning(f"HTTP error from {endpoint.name}: {e}")
@@ -659,19 +705,24 @@ class AIService:
 
         for endpoint in self._endpoints:
             logger.info(f"Trying text generation via {endpoint.name}")
+            use_max_completion_tokens = False
 
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-                for attempt in range(self.settings.ai_max_retries):
+                attempt = 0
+                while attempt < self.settings.ai_max_retries:
                     try:
+                        token_param = (
+                            "max_completion_tokens" if use_max_completion_tokens else "max_tokens"
+                        )
                         response = await client.post(
                             f"{endpoint.url}/chat/completions",
-                            headers=self._get_headers(),
+                            headers=self._get_headers(endpoint.api_key),
                             json={
                                 "model": endpoint.text_model,
                                 "messages": messages,
                                 "stream": False,
                                 "temperature": 0.4,
-                                "max_tokens": self.settings.ai_max_tokens,
+                                token_param: self.settings.ai_max_tokens,
                             },
                         )
                         response.raise_for_status()
@@ -701,9 +752,8 @@ class AIService:
                                 "thinking/reasoning mode for this model."
                             )
                             logger.warning(str(last_error))
-                            if attempt < self.settings.ai_max_retries - 1:
-                                continue
-                            break
+                            attempt += 1
+                            continue
 
                         logger.info(
                             f"Text generation successful via {endpoint.name} (model: {used_model})"
@@ -718,15 +768,22 @@ class AIService:
                         return content
 
                     except httpx.HTTPStatusError as e:
+                        if not use_max_completion_tokens and _response_rejects_max_tokens(
+                            e.response
+                        ):
+                            logger.warning(
+                                f"{endpoint.name} rejected max_tokens for text generation, "
+                                f"retrying with max_completion_tokens: {e}"
+                            )
+                            use_max_completion_tokens = True
+                            continue
                         last_error = e
                         logger.warning(f"HTTP error from {endpoint.name}: {e}")
-                        if attempt < self.settings.ai_max_retries - 1:
-                            continue
+                        attempt += 1
                     except httpx.RequestError as e:
                         last_error = e
                         logger.warning(f"Request error from {endpoint.name}: {e}")
-                        if attempt < self.settings.ai_max_retries - 1:
-                            continue
+                        attempt += 1
 
         if last_error:
             raise last_error

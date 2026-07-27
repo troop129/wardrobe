@@ -37,6 +37,9 @@ for the initial setup, but useful if we ever want an agentic import flow.
 
 ## Recommended starting models
 
+> Superseded by the "Quality decision" section below, which is what's actually
+> deployed now. Kept here as the initial-setup history/rationale.
+
 Install Ollama **natively on Windows** (not inside Docker) — the compose files
 already default `AI_BASE_URL` to `http://host.docker.internal:11434/v1` and add
 `extra_hosts: host.docker.internal:host-gateway`, which works out of the box
@@ -62,28 +65,70 @@ AI_VISION_MODEL=llava:7b
 AI_TEXT_MODEL=gemma3:latest
 ```
 
-## If quality/speed disappoints
+## Quality decision: mixed provider (OpenAI vision + local text)
 
-Try in this order before reaching for a paid API:
+Status: **decided and implemented** — first-upload sanity check (4 real items:
+white cargo pants, brown hoodie, Air Jordan 1s, a t-shirt) found `llava:7b`
+getting types wrong (jeans instead of pants, shirt instead of hoodie) and the
+free-text description contradicting the structured tags on the same item.
 
-1. Swap the vision model only — try `qwen2.5vl:7b` or a combined multimodal
-   model like `gemma3:12b` (still fits in 8GB at Q4 quantization).
-2. Increase `AI_TIMEOUT` (local models can be slower than cloud APIs;
-   `.env.example` notes worst case is `AI_TIMEOUT * AI_MAX_RETRIES`).
-3. Only then consider OpenAI (`gpt-4o-mini` for vision is cheap and fast) —
-   either fully switching `AI_BASE_URL`/keys to OpenAI, or via the mixed-mode
-   option below if you want to keep suggestions free/local.
+Tried in order:
 
-## Mixed provider option (Ollama for text, OpenAI for vision only)
+1. **Swapped to `qwen2.5vl:7b`** (still local/free) — fixed most of the type
+   errors and made the tags/description passes consistent with each other, but
+   still got material wrong (denim on cotton cargo pants) and subtype wrong
+   (low-top on a high-top Jordan 1), and hallucinated at higher input
+   resolution on one item.
+2. **A/B tested `qwen2.5vl:7b` vs OpenAI `gpt-5.6-terra`** on the same 4 photos,
+   same prompts, at both 512px (current preprocessing) and 1024px. Terra got
+   every field right on every item, including the ones qwen2.5vl:7b missed
+   (subtype, material), and stayed accurate at 1024px where qwen2.5vl:7b
+   regressed.
 
-Not needed initially, but documented since it maps to goal 4's "or for
-ingestion only" — since the app only supports one `AI_BASE_URL` for both
-capabilities today, true mixing needs a small local OpenAI-compatible proxy
-(e.g. [LiteLLM](https://github.com/BerriAI/litellm) running as an extra
-container) that routes a vision-model alias to OpenAI and a text-model alias to
-local Ollama, with the app's `AI_BASE_URL` pointed at the proxy instead of
-either backend directly. Treat as a later optimization if/when it's worth the
-extra moving part.
+Decision: since tagging only runs once per item, the cost of a paid vision
+model is trivial for a whole wardrobe (roughly a fraction of a cent per item at
+this prompt/image size), while suggestions/pairings run far more often and
+should stay free/local. This is now wired natively in the app —
+`AI_VISION_BASE_URL`/`AI_VISION_API_KEY` override the vision call only, falling
+back to `AI_BASE_URL`/`AI_API_KEY` (used for text) when unset. **No LiteLLM
+proxy needed** (see below for why one used to seem necessary).
+
+Current config:
+
+```env
+# Text stays local/free
+AI_BASE_URL=http://host.docker.internal:11434/v1
+AI_API_KEY=not-needed
+AI_TEXT_MODEL=qwen3.5:9b
+
+# Vision goes to OpenAI (one-time cost per item, meaningfully better quality)
+AI_VISION_BASE_URL=https://api.openai.com/v1
+AI_VISION_API_KEY=sk-...
+AI_VISION_MODEL=gpt-5.6-terra
+```
+
+`qwen3.5:9b` (~6.6GB at Q4) replaces the old `gemma3:latest` (4B) text model —
+now that vision isn't sharing the 8GB VRAM with a local vision model, there's
+room for a meaningfully stronger local text model for suggestions/pairings.
+
+Note: newer OpenAI models (the gpt-5.x/gpt-5.6 family) reject the legacy
+`max_tokens` param and require `max_completion_tokens` instead. The app
+detects this from the error response and retries automatically — no config
+needed, but worth knowing if you see it in logs on a fresh model swap.
+
+If cost ever becomes a concern, `gpt-4o-mini` or `gpt-5.6-luna` are cheaper
+fallbacks for `AI_VISION_MODEL` — quality wasn't tested for those specifically,
+so re-run the same A/B comparison before switching.
+
+### Why a proxy isn't needed (superseded)
+
+Earlier draft of this doc assumed the app's single `AI_BASE_URL`/`AI_API_KEY`
+pair meant mixing providers required a small OpenAI-compatible proxy (e.g.
+[LiteLLM](https://github.com/BerriAI/litellm)) in front to route vision/text
+model-aliases to different backends. Since this was a small, contained change
+and we were already switching this deployment to build from source (see
+[deployment.md](./deployment.md)), we added native capability-scoped endpoint
+config to `AIService` instead — simpler, no extra container.
 
 ## Virtual try-on (separate concern)
 
