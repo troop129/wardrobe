@@ -266,9 +266,15 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
               : status.status === 'in_progress'
                 ? { label: 'Generating catalog cutout…', progress: 55 }
                 : status.status === 'complete'
-                  ? { label: 'Finishing cutout…', progress: 92 }
-                  : { label: 'Working…', progress: 30 };
-          setImageJob({ kind: 'ai_catalog', ...mapped });
+                ? { label: 'Finishing cutout…', progress: 92 }
+                  : { label: 'Preparing AI catalog cutout…', progress: 18 };
+          // ARQ can report a stale queued/deferred status after the worker has
+          // started. Keep this visual progress monotonic so it never jumps back.
+          setImageJob((prev) =>
+            prev?.kind === 'ai_catalog' && prev.progress >= mapped.progress
+              ? prev
+              : { kind: 'ai_catalog', ...mapped }
+          );
         },
       });
       setImageKey((k) => k + 1);
@@ -360,7 +366,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       );
     }, 1500);
     return () => window.clearInterval(id);
-  }, [aiCatalogCutout.isPending, imageJob?.kind, imageJob?.progress]);
+  }, [aiCatalogCutout.isPending, imageJob?.kind]);
 
   if (!item) return null;
 
