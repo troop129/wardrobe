@@ -314,7 +314,7 @@ compose file with the version, e.g. `ghcr.io/anyesh/wardrowbe:backend-1.3.0`.
 | `SMTP_USER` | SMTP username | No |
 | `SMTP_PASSWORD` | SMTP password | No |
 | `BG_REMOVAL_PROVIDER` | Background removal backend: `rembg` or `http` (default: `rembg`) | No |
-| `BG_REMOVAL_MODEL` | rembg model name (default: `u2net`) | No |
+| `BG_REMOVAL_MODEL` | rembg model name (default: `isnet-general-use`) | No |
 | `BG_REMOVAL_URL` | URL for HTTP bg removal provider | If http |
 | `BG_REMOVAL_API_KEY` | API key for HTTP bg removal provider | No |
 | `NEXT_PUBLIC_ENABLE_IP_LOCATION_FALLBACK` | Enable IP-based approximate location when browser geolocation is denied/unavailable. Off by default (sends the user's IP to a third party). Set to `true` to enable | No |
@@ -334,7 +334,7 @@ Remove image backgrounds from wardrobe items. Two backends supported:
 ```bash
 pip install rembg[cpu]  # add to your image, or install manually
 ```
-No config needed — works out of the box. Change model with `BG_REMOVAL_MODEL` (default: `u2net`, options: `isnet-general-use`, `silueta`, `u2netp`).
+No config needed — works out of the box. Change model with `BG_REMOVAL_MODEL` (default: `isnet-general-use`, also: `u2net`, `silueta`, `u2netp`). Cutouts are saved as transparent PNGs so they blend with the gallery background.
 
 **HTTP provider (e.g. [withoutbg](https://github.com/nicholasgasior/withoutbg)):**
 ```env

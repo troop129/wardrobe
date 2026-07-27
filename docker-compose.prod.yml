@@ -61,6 +61,12 @@ services:
       AI_INTERNAL_ENABLED: ${AI_INTERNAL_ENABLED:-true}
       AI_VISION_ENABLED: ${AI_VISION_ENABLED:-}
       AI_TEXT_ENABLED: ${AI_TEXT_ENABLED:-}
+      AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-https://api.openai.com/v1}
+      AI_IMAGE_API_KEY: ${AI_IMAGE_API_KEY:-}
+      AI_IMAGE_MODEL: ${AI_IMAGE_MODEL:-gpt-image-2}
+      AI_IMAGE_QUALITY: ${AI_IMAGE_QUALITY:-medium}
+      AI_IMAGE_SIZE: ${AI_IMAGE_SIZE:-1024x1024}
+      AI_IMAGE_TIMEOUT: ${AI_IMAGE_TIMEOUT:-180}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       # OIDC (set these if using OIDC instead of forward auth)
@@ -120,6 +126,12 @@ services:
       AI_INTERNAL_ENABLED: ${AI_INTERNAL_ENABLED:-true}
       AI_VISION_ENABLED: ${AI_VISION_ENABLED:-}
       AI_TEXT_ENABLED: ${AI_TEXT_ENABLED:-}
+      AI_IMAGE_BASE_URL: ${AI_IMAGE_BASE_URL:-https://api.openai.com/v1}
+      AI_IMAGE_API_KEY: ${AI_IMAGE_API_KEY:-}
+      AI_IMAGE_MODEL: ${AI_IMAGE_MODEL:-gpt-image-2}
+      AI_IMAGE_QUALITY: ${AI_IMAGE_QUALITY:-medium}
+      AI_IMAGE_SIZE: ${AI_IMAGE_SIZE:-1024x1024}
+      AI_IMAGE_TIMEOUT: ${AI_IMAGE_TIMEOUT:-180}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Notifications
       NTFY_SERVER: ${NTFY_SERVER:-}

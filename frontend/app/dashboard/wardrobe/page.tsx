@@ -6,6 +6,7 @@ import { Plus, Search, Grid3X3, Loader2, AlertCircle, ArrowUpDown, SlidersHorizo
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -162,6 +163,10 @@ export default function WardrobePage() {
   const bulkDelete = useBulkDeleteItems();
   const bulkReanalyze = useBulkReanalyzeItems();
   const bulkRemoveBackground = useBulkRemoveBackgroundItems();
+  const [bulkProgress, setBulkProgress] = useState<{
+    label: string;
+    value: number;
+  } | null>(null);
 
   const items = data?.items || [];
   const total = data?.total || 0;
@@ -181,6 +186,42 @@ export default function WardrobePage() {
   useEffect(() => {
     setSelection({ mode: 'none', selectedIds: new Set(), excludedIds: new Set() });
   }, [search, typeFilter, needsWash, favoriteFilter, sortIndex]);
+
+  // Soft progress for bulk cleanup / re-analyze while the queue request is in flight
+  // and while items remain processing.
+  useEffect(() => {
+    const cleaning = bulkRemoveBackground.isPending;
+    const reanalyzing = bulkReanalyze.isPending || processingCount > 0;
+    if (!cleaning && !reanalyzing) {
+      setBulkProgress(null);
+      return;
+    }
+    setBulkProgress((prev) =>
+      prev ?? {
+        label: cleaning
+          ? 'Queueing background cleanup…'
+          : processingCount > 0
+            ? `Analyzing ${processingCount} item${processingCount !== 1 ? 's' : ''}…`
+            : 'Queueing re-analysis…',
+        value: 12,
+      }
+    );
+    const id = window.setInterval(() => {
+      setBulkProgress((prev) => {
+        if (!prev) return prev;
+        const nextLabel = cleaning
+          ? 'Cleaning up backgrounds…'
+          : processingCount > 0
+            ? `Analyzing ${processingCount} item${processingCount !== 1 ? 's' : ''}…`
+            : prev.label;
+        return {
+          label: nextLabel,
+          value: Math.min(cleaning ? 90 : 85, prev.value + 4),
+        };
+      });
+    }, 700);
+    return () => window.clearInterval(id);
+  }, [bulkRemoveBackground.isPending, bulkReanalyze.isPending, processingCount]);
 
   const handleRetry = (itemId: string) => {
     reanalyze.mutate(itemId);
@@ -508,6 +549,16 @@ export default function WardrobePage() {
           </div>
         )}
       </div>
+
+      {bulkProgress && (
+        <div className="rounded-lg border bg-card px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">{bulkProgress.label}</span>
+            <span className="text-muted-foreground tabular-nums">{bulkProgress.value}%</span>
+          </div>
+          <Progress value={bulkProgress.value} className="h-1.5" />
+        </div>
+      )}
 
       {error ? (
         <div className="text-center py-8">

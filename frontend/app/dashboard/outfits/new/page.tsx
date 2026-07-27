@@ -339,7 +339,7 @@ export default function StudioEditorPage() {
           </Link>
         </Button>
         <h1 className="text-lg font-semibold">
-          {isEditMode ? 'Edit Outfit' : 'Studio'}
+          {isEditMode ? 'Edit outfit' : 'Outfit builder'}
         </h1>
         <div className="flex flex-col items-end">
           <div className="flex gap-2">
@@ -402,7 +402,7 @@ export default function StudioEditorPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <h2 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
-                Canvas
+                Your outfit
               </h2>
               <CanvasPanel
                 items={state.items}

@@ -63,9 +63,12 @@ async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
 
 @router.get("/health/features")
 async def feature_check() -> dict[str, Any]:
-    from app.services import background_removal
+    from app.services import ai_catalog_cutout, background_removal
 
-    return {"background_removal": background_removal.is_available()}
+    return {
+        "background_removal": background_removal.is_available(),
+        "ai_catalog_cutout": ai_catalog_cutout.is_available(),
+    }
 
 
 @router.get("/health/ai")

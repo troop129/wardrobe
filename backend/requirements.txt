@@ -21,6 +21,9 @@ httpx>=0.26.0
 pillow>=10.2.0
 pillow-heif>=0.14.0
 
+# OpenAI Image API (opt-in AI catalog cutouts via images.edit)
+openai>=1.60.0
+
 # Background jobs
 redis>=5.0.1
 arq>=0.25.0

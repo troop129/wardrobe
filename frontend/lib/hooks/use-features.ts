@@ -6,6 +6,7 @@ import { api, setAccessToken } from '@/lib/api';
 
 interface Features {
   background_removal: boolean;
+  ai_catalog_cutout: boolean;
 }
 
 export function useFeatures() {

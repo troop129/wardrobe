@@ -10,9 +10,9 @@ from app.schemas.item import RemoveBackgroundRequest
 
 
 class TestRemoveBackgroundRequest:
-    def test_default_white(self):
+    def test_default_transparent(self):
         req = RemoveBackgroundRequest()
-        assert req.bg_color == "#FFFFFF"
+        assert req.bg_color is None
 
     def test_valid_hex(self):
         req = RemoveBackgroundRequest(bg_color="#FF0000")
@@ -84,3 +84,5 @@ class TestHealthFeatures:
         data = response.json()
         assert "background_removal" in data
         assert isinstance(data["background_removal"], bool)
+        assert "ai_catalog_cutout" in data
+        assert isinstance(data["ai_catalog_cutout"], bool)

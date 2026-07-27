@@ -6,33 +6,23 @@ import {
   Home,
   Shirt,
   Sparkles,
-  Layers,
   LayoutGrid,
   History,
   BarChart3,
-  Brain,
   Settings,
-  Users,
-  Bell,
-  HeartHandshake,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Home', href: '/dashboard', icon: Home },
   { name: 'Wardrobe', href: '/dashboard/wardrobe', icon: Shirt },
-  { name: 'Suggest Outfit', href: '/dashboard/suggest', icon: Sparkles },
-  { name: 'Outfits', href: '/dashboard/outfits', icon: LayoutGrid },
-  { name: 'Pairings', href: '/dashboard/pairings', icon: Layers },
-  { name: 'History', href: '/dashboard/history', icon: History },
-  { name: 'Family Feed', href: '/dashboard/family/feed', icon: HeartHandshake },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'AI Learning', href: '/dashboard/learning', icon: Brain },
+  { name: 'Get an outfit', href: '/dashboard/suggest', icon: Sparkles },
+  { name: 'My outfits', href: '/dashboard/outfits', icon: LayoutGrid },
+  { name: 'Wear history', href: '/dashboard/history', icon: History },
 ];
 
 const secondaryNavigation = [
-  { name: 'Family', href: '/dashboard/family', icon: Users },
-  { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  { name: 'Insights', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 

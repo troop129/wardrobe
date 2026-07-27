@@ -24,9 +24,12 @@ tandpfun's cleaner, card-based gallery look.
   (`auto_background_removal` config flag, gated on
   `background_removal.is_available()`) and added a bulk "clean up
   backgrounds" action (`POST /items/bulk/remove-background`,
-  `useBulkRemoveBackgroundItems`) so every item ends up on a neat, uniform
-  white background at no extra cost. A paid AI-generated-thumbnail approach
-  stays a deferred future option — same bucket as item 2 below.
+  `useBulkRemoveBackgroundItems`) so every item ends up as a neat transparent
+  PNG cutout at no extra cost. An opt-in paid **AI catalog cutout**
+  (`POST /items/{id}/ai-catalog-cutout`, OpenAI `images.edit` + local chroma
+  key) is also available when `AI_IMAGE_API_KEY` / `AI_API_KEY` is set — see
+  item detail → “AI catalog cutout”. Modeled virtual try-on remains deferred
+  under item 2 below.
 - No dependency on any AI/API changes — this stayed safe to do without
   touching the paid-AI provider setup.
 

@@ -26,10 +26,8 @@ interface ItemCardProps {
   userTimezone: string;
 }
 
-// Flat, borderless tile (no shadows/heavy chrome) - the thumbnail itself is
-// expected to already sit on a clean white/cutout background (see the
-// background-removal feature), so the tile just frames it with quiet padding
-// instead of filling edge-to-edge.
+// Flat, borderless tile (no shadows/heavy chrome) - after background removal
+// thumbnails are transparent PNG cutouts, so bg-card shows through cleanly.
 export function ItemCard({
   item,
   selected,

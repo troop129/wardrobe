@@ -245,40 +245,131 @@ class ImageService:
         """
         return ImageService.hash_distance(hash1, hash2) <= threshold
 
-    def _save_all_sizes(self, image: Image.Image, image_path: str) -> dict[str, str]:
+    def _paths_for_base(self, base_path: str, extension: str) -> dict[str, str]:
+        ext = extension if extension.startswith(".") else f".{extension}"
+        return {
+            "image_path": f"{base_path}{ext}",
+            "medium_path": f"{base_path}_medium{ext}",
+            "thumbnail_path": f"{base_path}_thumb{ext}",
+        }
+
+    def _delete_size_files(self, paths: dict[str, str | None]) -> None:
+        for path in paths.values():
+            if not path:
+                continue
+            full = self.storage_path / path
+            if full.exists():
+                full.unlink()
+
+    def _save_all_sizes(
+        self,
+        image: Image.Image,
+        image_path: str,
+        *,
+        preserve_alpha: bool = False,
+    ) -> dict[str, str]:
         base_path = image_path.rsplit(".", 1)[0]
-        medium_path = f"{base_path}_medium.jpg"
-        thumb_path = f"{base_path}_thumb.jpg"
+        extension = ".png" if preserve_alpha else ".jpg"
+        paths = self._paths_for_base(base_path, extension)
 
         for size_name, max_size in SIZES.items():
             if size_name == "original":
-                file_path = self.storage_path / image_path
+                file_path = self.storage_path / paths["image_path"]
                 quality = 95
             elif size_name == "medium":
-                file_path = self.storage_path / medium_path
+                file_path = self.storage_path / paths["medium_path"]
                 quality = 90
             else:
-                file_path = self.storage_path / thumb_path
+                file_path = self.storage_path / paths["thumbnail_path"]
                 quality = 88
 
             img_copy = image.copy()
             img_copy.thumbnail(max_size, Image.Resampling.LANCZOS)
 
             output = BytesIO()
-            img_copy.save(output, format="JPEG", quality=quality, optimize=True)
+            if preserve_alpha:
+                if img_copy.mode != "RGBA":
+                    img_copy = img_copy.convert("RGBA")
+                img_copy.save(output, format="PNG", optimize=True)
+            else:
+                if img_copy.mode in ("RGBA", "P", "LA"):
+                    background = Image.new("RGB", img_copy.size, (255, 255, 255))
+                    if img_copy.mode == "P":
+                        img_copy = img_copy.convert("RGBA")
+                    mask = img_copy.split()[-1] if img_copy.mode == "RGBA" else None
+                    background.paste(img_copy, mask=mask)
+                    img_copy = background
+                elif img_copy.mode != "RGB":
+                    img_copy = img_copy.convert("RGB")
+                img_copy.save(output, format="JPEG", quality=quality, optimize=True)
             file_path.write_bytes(output.getvalue())
 
-        return {
-            "image_path": image_path,
-            "medium_path": medium_path,
-            "thumbnail_path": thumb_path,
-        }
+        return paths
 
     def remove_background(
         self,
         image_path: str,
-        bg_color: tuple[int, int, int] = (255, 255, 255),
+        bg_color: tuple[int, int, int] | None = None,
     ) -> dict[str, str]:
+        """Remove the image background.
+
+        When ``bg_color`` is None (default), the cutout is saved as a
+        transparent PNG so it blends with whatever card/page color the UI uses.
+        When a solid color is provided, the cutout is composited onto that color
+        and saved as JPEG (legacy behavior).
+        """
+        base_path = image_path.rsplit(".", 1)[0]
+        original_full = self.storage_path / image_path
+
+        if not original_full.exists():
+            raise ValueError(f"Image not found: {image_path}")
+
+        # Prefer a JPEG-named backup so restore always has a stable RGB source,
+        # even when the working cutout later becomes a PNG.
+        backup_path = f"{base_path}_orig.jpg"
+        backup_full = self.storage_path / backup_path
+        # First removal wins: a second removal must not overwrite the true
+        # original with an already-processed image
+        if not backup_full.exists():
+            if image_path.lower().endswith((".png", ".webp")):
+                Image.open(original_full).convert("RGB").save(backup_full, format="JPEG", quality=95)
+            else:
+                shutil.copy2(original_full, backup_full)
+
+        image = Image.open(original_full).convert("RGB")
+        # Prefer the true original when re-running removal (e.g. after a quality
+        # upgrade), so we don't rembg an already-composited cutout.
+        if backup_full.exists():
+            image = Image.open(backup_full).convert("RGB")
+        provider = background_removal.get_provider()
+        result = provider.remove(image)
+
+        preserve_alpha = bg_color is None
+        if preserve_alpha:
+            final: Image.Image = result.convert("RGBA")
+        else:
+            background = Image.new("RGBA", result.size, (*bg_color, 255))
+            background.paste(result, mask=result.split()[3])
+            final = background.convert("RGB")
+
+        old_paths = self._paths_for_base(base_path, Path(image_path).suffix)
+        paths = self._save_all_sizes(final, image_path, preserve_alpha=preserve_alpha)
+
+        # Drop previous format variants when the cutout switches jpg <-> png
+        if old_paths["image_path"] != paths["image_path"]:
+            self._delete_size_files(old_paths)
+
+        paths["original_backup_path"] = backup_path
+        return paths
+
+    def ai_catalog_cutout(self, image_path: str) -> dict[str, str]:
+        """Regenerate a catalog-style transparent PNG via OpenAI images.edit.
+
+        Uses the first-wins `_orig.jpg` backup as the reference when present
+        (same restore flow as rembg). Always saves transparent PNG sizes.
+        """
+        from app.services import ai_catalog_cutout
+
         base_path = image_path.rsplit(".", 1)[0]
         original_full = self.storage_path / image_path
 
@@ -287,21 +378,24 @@ class ImageService:
 
         backup_path = f"{base_path}_orig.jpg"
         backup_full = self.storage_path / backup_path
-        # First removal wins: a second removal must not overwrite the true
-        # original with an already-processed image
+        # First cutout wins: preserve the true source for restore / re-runs.
         if not backup_full.exists():
-            shutil.copy2(original_full, backup_full)
+            if image_path.lower().endswith((".png", ".webp")):
+                Image.open(original_full).convert("RGB").save(
+                    backup_full, format="JPEG", quality=95
+                )
+            else:
+                shutil.copy2(original_full, backup_full)
 
-        image = Image.open(original_full).convert("RGB")
-        provider = background_removal.get_provider()
-        result = provider.remove(image)
+        source_full = backup_full if backup_full.exists() else original_full
+        result = ai_catalog_cutout.generate_transparent_cutout(source_full)
 
-        # Composite onto solid color background
-        background = Image.new("RGBA", result.size, (*bg_color, 255))
-        background.paste(result, mask=result.split()[3])
-        final = background.convert("RGB")
+        old_paths = self._paths_for_base(base_path, Path(image_path).suffix)
+        paths = self._save_all_sizes(result, image_path, preserve_alpha=True)
 
-        paths = self._save_all_sizes(final, image_path)
+        if old_paths["image_path"] != paths["image_path"]:
+            self._delete_size_files(old_paths)
+
         paths["original_backup_path"] = backup_path
         return paths
 
@@ -310,8 +404,19 @@ class ImageService:
         if not backup_full.exists():
             raise ValueError(f"Backup not found: {backup_path}")
 
+        # Backup is always JPEG (`{base}_orig.jpg`); restore to `{base}.jpg`
+        if backup_path.endswith("_orig.jpg"):
+            restore_path = f"{backup_path[: -len('_orig.jpg')]}.jpg"
+        else:
+            restore_path = image_path.rsplit(".", 1)[0] + ".jpg"
+
         image = Image.open(backup_full).convert("RGB")
-        paths = self._save_all_sizes(image, image_path)
+        paths = self._save_all_sizes(image, restore_path, preserve_alpha=False)
+
+        if image_path != paths["image_path"]:
+            base_path = image_path.rsplit(".", 1)[0]
+            self._delete_size_files(self._paths_for_base(base_path, Path(image_path).suffix))
+
         backup_full.unlink()
         return paths
 
@@ -346,4 +451,4 @@ class ImageService:
 
         rotated = image.rotate(angle, expand=True)
 
-        return self._save_all_sizes(rotated, image_path)
+        return self._save_all_sizes(rotated, image_path, preserve_alpha=False)

@@ -56,20 +56,20 @@ const OIDCProvider: OAuthConfig<OIDCProfile> = {
   },
 };
 
-// Dev credentials provider - for local development only
+// Password-free sign-in for a trusted, private LAN deployment.
 const DevCredentialsProvider = CredentialsProvider({
   id: 'dev-credentials',
-  name: 'Dev Login',
+  name: 'Local Sign-in',
   credentials: {
-    email: { label: 'Email', type: 'email', placeholder: 'dev@example.com' },
-    name: { label: 'Name', type: 'text', placeholder: 'Dev User' },
+    email: { label: 'Email', type: 'email', placeholder: 'you@wardrowbe.local' },
+    name: { label: 'Name', type: 'text', placeholder: 'Your name' },
   },
   async authorize(credentials) {
     if (!credentials?.email) {
       return null;
     }
 
-    // In dev mode, accept any email/name combination
+    // This provider is intentionally only enabled by an explicit environment flag.
     const email = credentials.email;
     const name = credentials.name || email.split('@')[0];
     const id = email.replace(/[^a-z0-9]/gi, '-').toLowerCase();

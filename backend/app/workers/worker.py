@@ -7,7 +7,7 @@ from sqlalchemy import update
 from app.config import get_settings
 from app.models.item import ClothingItem, ItemStatus
 from app.services.ai_service import AIService
-from app.workers.background import remove_item_background_job
+from app.workers.background import ai_catalog_cutout_job, remove_item_background_job
 from app.workers.db import close_db, get_db_session, init_db
 from app.workers.notifications import (
     check_scheduled_notifications,
@@ -64,6 +64,7 @@ class WorkerSettings:
     functions = [
         tag_item_image,
         remove_item_background_job,
+        ai_catalog_cutout_job,
         send_notification,
         retry_failed_notifications,
         check_scheduled_notifications,

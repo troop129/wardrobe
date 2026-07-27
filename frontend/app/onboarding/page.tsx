@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import {
   Loader2,
   Shirt,
-  Users,
   MapPin,
   Palette,
   Camera,
@@ -29,7 +28,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { useCreateFamily, useJoinFamily } from '@/lib/hooks/use-family';
 import { useUpdatePreferences } from '@/lib/hooks/use-preferences';
 import { useCreateItem } from '@/lib/hooks/use-items';
 import { useAuth } from '@/lib/hooks/use-auth';
@@ -38,7 +36,6 @@ import { CLOTHING_COLORS, CLOTHING_TYPES, StyleProfile } from '@/lib/types';
 
 const STEPS = [
   { id: 'welcome', title: 'Welcome', icon: Shirt },
-  { id: 'family', title: 'Family', icon: Users },
   { id: 'location', title: 'Location', icon: MapPin },
   { id: 'preferences', title: 'Style', icon: Palette },
   { id: 'upload', title: 'First Item', icon: Camera },
@@ -118,17 +115,6 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
             <p className="font-medium">Get personalized outfits</p>
             <p className="text-sm text-muted-foreground">
               Daily recommendations based on weather and your style
-            </p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-            <Users className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <p className="font-medium">Share with family</p>
-            <p className="text-sm text-muted-foreground">
-              Everyone can have their own personalized wardrobe
             </p>
           </div>
         </div>
@@ -814,15 +800,14 @@ export default function OnboardingPage() {
 
         <div className="py-8">
           {currentStep === 0 && <WelcomeStep onNext={nextStep} />}
-          {currentStep === 1 && <FamilyStep onNext={nextStep} onSkip={nextStep} />}
-          {currentStep === 2 && (
+          {currentStep === 1 && (
             <LocationStep
               onNext={nextStep}
               onSkip={nextStep}
             />
           )}
-          {currentStep === 3 && <PreferencesStep onNext={nextStep} onSkip={nextStep} />}
-          {currentStep === 4 && <UploadStep onNext={nextStep} onSkip={nextStep} />}
+          {currentStep === 2 && <PreferencesStep onNext={nextStep} onSkip={nextStep} />}
+          {currentStep === 3 && <UploadStep onNext={nextStep} onSkip={nextStep} />}
           {currentStep === STEPS.length && <CompleteStep onFinish={handleFinish} completing={completing} />}
         </div>
 

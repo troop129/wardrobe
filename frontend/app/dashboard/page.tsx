@@ -645,8 +645,6 @@ export default function DashboardPage() {
         <InsightsCard />
       </div>
 
-      {/* Family feed card */}
-      <FamilyFeedCard />
     </div>
   );
 }

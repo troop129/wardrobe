@@ -61,8 +61,10 @@ last edit:
       choice above used a synthetic benchmark, not real items yet)
 - [x] Gallery UI port (from tandpfun) — restyled wardrobe grid/item cards,
       item detail dialog, sidebar and header to tandpfun's calmer, flatter
-      look, plus automatic + bulk white-background thumbnails using the
+      look, plus automatic + bulk transparent PNG cutouts using the
       existing free/local background-removal pipeline (see
       [roadmap.md](./roadmap.md#1-gallery-ui-port-from-tandpfunwardrobe))
 - [ ] Virtual try-on POC (from tandpfun, OpenAI `gpt-image`)
+- [x] Opt-in AI catalog cutout (OpenAI `images.edit` + chroma key) —
+      deployed and smoke-tested on one item
 - [ ] Remote access for second user (deferred — Cloudflare Tunnel direction)

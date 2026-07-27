@@ -292,10 +292,13 @@ class ReorderImagesRequest(BaseModel):
 
 
 class RemoveBackgroundRequest(BaseModel):
-    bg_color: str = Field(
-        default="#FFFFFF",
+    bg_color: str | None = Field(
+        default=None,
         pattern=r"^#[0-9A-Fa-f]{6}$",
-        description="Hex color for the replacement background",
+        description=(
+            "Optional hex color for a solid replacement background. "
+            "When omitted, the cutout is saved as a transparent PNG."
+        ),
     )
 
 

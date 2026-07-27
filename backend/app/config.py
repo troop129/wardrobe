@@ -88,15 +88,36 @@ class Settings(BaseSettings):
 
     # Background removal
     bg_removal_provider: str = Field(default="rembg")  # "rembg" or "http"
-    bg_removal_model: str = Field(default="u2net")  # rembg model name
+    # isnet-general-use is slower than u2net but much cleaner on clothing photos
+    bg_removal_model: str = Field(default="isnet-general-use")
     bg_removal_url: str | None = Field(default=None)  # URL for http provider (e.g. withoutbg)
     bg_removal_api_key: str | None = Field(default=None)  # API key for http provider
     # When true, newly uploaded items are automatically queued for background
-    # removal (cutout composited onto a white background) right after upload,
-    # and the bulk "clean up backgrounds" action becomes available in the UI.
+    # removal (transparent PNG cutout) right after upload, and the bulk
+    # "clean up backgrounds" action becomes available in the UI.
     # No-ops quietly (no jobs queued) when no provider is available - see
     # background_removal.is_available().
     auto_background_removal: bool = Field(default=True)
+
+    # Opt-in AI catalog cutouts (OpenAI Image API images.edit). rembg stays the
+    # free auto/bulk default; this is a paid per-item action. Key falls back to
+    # AI_API_KEY when AI_IMAGE_API_KEY is unset.
+    ai_image_base_url: str = Field(default="https://api.openai.com/v1")
+    ai_image_api_key: str | None = Field(default=None)
+    ai_image_model: str = Field(default="gpt-image-2")
+    # Locked after quality/price bench: medium ≈$0.065 / ~45s vs high ≈$0.22 / ~142s.
+    ai_image_quality: str = Field(default="medium")  # "high" | "medium" | "low"
+    ai_image_size: str = Field(default="1024x1024")
+    ai_image_timeout: int = Field(default=180)  # edits can take up to ~2 minutes
+
+    @property
+    def effective_ai_image_api_key(self) -> str | None:
+        return self.ai_image_api_key or self.ai_api_key
+
+    @property
+    def ai_catalog_cutout_enabled(self) -> bool:
+        """True when a usable Image API key is configured."""
+        return bool(self.effective_ai_image_api_key)
 
     # Image processing
     thumbnail_size: int = 400

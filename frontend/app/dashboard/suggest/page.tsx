@@ -289,6 +289,51 @@ function WeatherOverrideSection({
   );
 }
 
+function OutfitGenerationProgress() {
+  const [stage, setStage] = useState(0);
+  const stages = [
+    'Looking through your wardrobe…',
+    'Matching colours, layers, and the weather…',
+    'Putting your look together…',
+  ];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setStage((current) => (current + 1) % stages.length);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [stages.length]);
+
+  return (
+    <Card aria-live="polite" aria-busy="true" className="overflow-hidden">
+      <CardContent className="p-6 space-y-6">
+        <div className="flex flex-col items-center text-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-6 w-6 animate-pulse text-primary" />
+          </div>
+          <div>
+            <h2 className="font-semibold">Creating your outfit</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{stages[stage]}</p>
+          </div>
+        </div>
+        <div className="space-y-3" aria-hidden="true">
+          <Skeleton className="h-5 w-2/5" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <div className="grid grid-cols-3 gap-3 pt-2">
+            <Skeleton className="aspect-square rounded-xl" />
+            <Skeleton className="aspect-square rounded-xl" />
+            <Skeleton className="aspect-square rounded-xl" />
+          </div>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          This can take a little while when the AI is busy. Keep this page open.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function OutfitResult({
   outfit,
   occasion,
@@ -554,7 +599,8 @@ export default function SuggestPage() {
           {/* Weather context */}
           <WeatherCard weather={weather} isLoading={weatherLoading} temperatureUnit={temperatureUnit} />
 
-          {/* Main selection card */}
+          {isGenerating ? <OutfitGenerationProgress /> : (
+          /* Main selection card */
           <Card>
             <CardContent className="p-6 space-y-6">
               {/* Occasion selection */}
@@ -596,6 +642,7 @@ export default function SuggestPage() {
               </div>
             </CardContent>
           </Card>
+          )}
         </div>
       ) : (
         <OutfitResult

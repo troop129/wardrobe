@@ -9,6 +9,7 @@ from app.services.background_removal import (
     HttpProvider,
     RembgProvider,
     get_provider,
+    refine_cutout,
 )
 
 
@@ -20,9 +21,35 @@ def _make_rgb_image(w=100, h=100):
     return Image.new("RGB", (w, h), (200, 150, 100))
 
 
+class TestRefineCutout:
+    def test_drops_small_disconnected_blob(self):
+        # Large subject in the center + tiny junk in the corner (hanger/tag)
+        img = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+        for x in range(20, 80):
+            for y in range(20, 80):
+                img.putpixel((x, y), (40, 40, 40, 255))
+        for x in range(2, 8):
+            for y in range(2, 8):
+                img.putpixel((x, y), (10, 10, 10, 255))
+
+        result = refine_cutout(img)
+        assert result.getpixel((5, 5))[3] == 0
+        assert result.getpixel((50, 50))[3] > 200
+
+    def test_crushes_soft_ghost_pixels(self):
+        img = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+        for x in range(10, 30):
+            for y in range(10, 30):
+                img.putpixel((x, y), (80, 80, 80, 255))
+        img.putpixel((2, 2), (200, 200, 200, 10))  # soft fringe junk
+
+        result = refine_cutout(img)
+        assert result.getpixel((2, 2))[3] == 0
+
+
 class TestRembgProvider:
     def test_remove_calls_rembg(self):
-        provider = RembgProvider(model="u2net")
+        provider = RembgProvider(model="isnet-general-use")
         mock_result = _make_rgba_image()
         mock_new_session = MagicMock(return_value="fake-session")
         mock_remove = MagicMock(return_value=mock_result)
@@ -31,11 +58,13 @@ class TestRembgProvider:
                 "sys.modules",
                 {"rembg": MagicMock(new_session=mock_new_session, remove=mock_remove)},
             ),
+            patch("app.services.background_removal.refine_cutout", side_effect=lambda im: im),
         ):
             result = provider.remove(_make_rgb_image())
 
-        mock_new_session.assert_called_once_with("u2net")
+        mock_new_session.assert_called_once_with("isnet-general-use")
         mock_remove.assert_called_once()
+        assert mock_remove.call_args.kwargs.get("post_process_mask") is True
         assert result.mode == "RGBA"
 
     def test_session_is_cached(self):
@@ -48,6 +77,7 @@ class TestRembgProvider:
                 "sys.modules",
                 {"rembg": MagicMock(new_session=mock_new_session, remove=mock_remove)},
             ),
+            patch("app.services.background_removal.refine_cutout", side_effect=lambda im: im),
         ):
             provider.remove(_make_rgb_image())
             provider.remove(_make_rgb_image())
@@ -55,7 +85,7 @@ class TestRembgProvider:
         mock_new_session.assert_called_once()
 
     def test_custom_model(self):
-        provider = RembgProvider(model="isnet-general-use")
+        provider = RembgProvider(model="u2net")
         mock_result = _make_rgba_image()
         mock_new_session = MagicMock(return_value="fake-session")
         mock_remove = MagicMock(return_value=mock_result)
@@ -64,10 +94,11 @@ class TestRembgProvider:
                 "sys.modules",
                 {"rembg": MagicMock(new_session=mock_new_session, remove=mock_remove)},
             ),
+            patch("app.services.background_removal.refine_cutout", side_effect=lambda im: im),
         ):
             provider.remove(_make_rgb_image())
 
-        mock_new_session.assert_called_once_with("isnet-general-use")
+        mock_new_session.assert_called_once_with("u2net")
 
 
 class TestHttpProvider:
@@ -82,7 +113,10 @@ class TestHttpProvider:
         mock_response.content = png_bytes.getvalue()
         mock_response.raise_for_status = MagicMock()
 
-        with patch("app.services.background_removal.httpx.Client") as mock_client_cls:
+        with (
+            patch("app.services.background_removal.httpx.Client") as mock_client_cls,
+            patch("app.services.background_removal.refine_cutout", side_effect=lambda im: im),
+        ):
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
@@ -109,7 +143,10 @@ class TestHttpProvider:
         mock_response.content = png_bytes.getvalue()
         mock_response.raise_for_status = MagicMock()
 
-        with patch("app.services.background_removal.httpx.Client") as mock_client_cls:
+        with (
+            patch("app.services.background_removal.httpx.Client") as mock_client_cls,
+            patch("app.services.background_removal.refine_cutout", side_effect=lambda im: im),
+        ):
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
@@ -131,11 +168,11 @@ class TestGetProvider:
     def test_rembg_provider(self):
         settings = MagicMock()
         settings.bg_removal_provider = "rembg"
-        settings.bg_removal_model = "u2net"
+        settings.bg_removal_model = "isnet-general-use"
         with patch("app.services.background_removal.get_settings", return_value=settings):
             provider = get_provider()
         assert isinstance(provider, RembgProvider)
-        assert provider.model == "u2net"
+        assert provider.model == "isnet-general-use"
 
     def test_http_provider(self):
         settings = MagicMock()
@@ -170,7 +207,7 @@ class TestGetProvider:
     def test_provider_is_cached(self):
         settings = MagicMock()
         settings.bg_removal_provider = "rembg"
-        settings.bg_removal_model = "u2net"
+        settings.bg_removal_model = "isnet-general-use"
         with patch("app.services.background_removal.get_settings", return_value=settings):
             p1 = get_provider()
             p2 = get_provider()

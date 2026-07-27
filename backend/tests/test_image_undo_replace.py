@@ -76,7 +76,19 @@ class TestRemoveBackgroundBackup:
         backup_full = svc.get_image_path(backup_path)
         assert backup_full.exists()
         assert backup_full.read_bytes() == original_bytes
-        assert _close(_pixel(svc.get_image_path(item_with_image.image_path)), BLUE)
+        assert result["image_path"].endswith(".png")
+        assert _close(_pixel(svc.get_image_path(result["image_path"])), BLUE)
+        # Transparent PNG cutout — corner alpha should be fully opaque for our mock
+        assert Image.open(svc.get_image_path(result["image_path"])).mode == "RGBA"
+
+    @pytest.mark.asyncio
+    async def test_solid_bg_color_stays_jpeg(self, item_with_image: ClothingItem):
+        svc = ImageService()
+        with patch("app.services.background_removal.get_provider", return_value=_mock_provider()):
+            result = svc.remove_background(item_with_image.image_path, (255, 255, 255))
+
+        assert result["image_path"].endswith(".jpg")
+        assert _close(_pixel(svc.get_image_path(result["image_path"])), BLUE)
 
     @pytest.mark.asyncio
     async def test_double_removal_keeps_first_backup(self, item_with_image: ClothingItem):
@@ -85,7 +97,7 @@ class TestRemoveBackgroundBackup:
 
         with patch("app.services.background_removal.get_provider", return_value=_mock_provider()):
             first = svc.remove_background(item_with_image.image_path)
-            second = svc.remove_background(item_with_image.image_path)
+            second = svc.remove_background(first["image_path"])
 
         assert first["original_backup_path"] == second["original_backup_path"]
         backup_full = svc.get_image_path(first["original_backup_path"])
@@ -97,13 +109,14 @@ class TestRemoveBackgroundBackup:
         with patch("app.services.background_removal.get_provider", return_value=_mock_provider()):
             result = svc.remove_background(item_with_image.image_path)
 
-        restored = svc.restore_original(item_with_image.image_path, result["original_backup_path"])
+        restored = svc.restore_original(result["image_path"], result["original_backup_path"])
 
-        assert restored["image_path"] == item_with_image.image_path
-        assert _close(_pixel(svc.get_image_path(item_with_image.image_path)), GREEN)
+        assert restored["image_path"].endswith(".jpg")
+        assert _close(_pixel(svc.get_image_path(restored["image_path"])), GREEN)
         assert _close(_pixel(svc.get_image_path(restored["medium_path"])), GREEN)
         assert _close(_pixel(svc.get_image_path(restored["thumbnail_path"])), GREEN)
         assert not svc.get_image_path(result["original_backup_path"]).exists()
+        assert not svc.get_image_path(result["image_path"]).exists()
 
     @pytest.mark.asyncio
     async def test_restore_missing_backup_raises(self, item_with_image: ClothingItem):
@@ -130,6 +143,8 @@ class TestRemoveBackgroundEndpointBackup:
         data = response.json()
         assert data["original_image_path"] is not None
         assert data["original_image_path"].endswith("_orig.jpg")
+        assert data["image_path"].endswith(".png")
+        assert data["thumbnail_path"].endswith(".png")
         assert ImageService().get_image_path(data["original_image_path"]).exists()
 
 
@@ -145,6 +160,7 @@ class TestRestoreOriginalEndpoint:
                 headers=auth_headers,
             )
         backup_path = removal.json()["original_image_path"]
+        png_path = removal.json()["image_path"]
 
         response = await client.post(
             f"/api/v1/items/{item_with_image.id}/restore-original",
@@ -154,9 +170,11 @@ class TestRestoreOriginalEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["original_image_path"] is None
+        assert data["image_path"].endswith(".jpg")
         svc = ImageService()
-        assert _close(_pixel(svc.get_image_path(item_with_image.image_path)), GREEN)
+        assert _close(_pixel(svc.get_image_path(data["image_path"])), GREEN)
         assert not svc.get_image_path(backup_path).exists()
+        assert not svc.get_image_path(png_path).exists()
 
     @pytest.mark.asyncio
     async def test_no_backup_returns_400(

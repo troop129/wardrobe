@@ -19,9 +19,9 @@ function OIDCLoginButton({ callbackUrl }: { callbackUrl: string }) {
   );
 }
 
-function DevLogin({ callbackUrl }: { callbackUrl: string }) {
-  const [email, setEmail] = useState('dev@wardrobe.local');
-  const [name, setName] = useState('Dev User');
+function LocalLogin({ callbackUrl }: { callbackUrl: string }) {
+  const [email, setEmail] = useState('you@wardrowbe.local');
+  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +37,7 @@ function DevLogin({ callbackUrl }: { callbackUrl: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">
-        Development Mode - Any credentials accepted
+        Private home-network sign-in — choose the name and email you want to use here.
       </div>
       <div className="space-y-2">
         <label htmlFor="email" className="block text-sm font-medium">
@@ -50,7 +50,7 @@ function DevLogin({ callbackUrl }: { callbackUrl: string }) {
           onChange={(e) => setEmail(e.target.value)}
           required
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          placeholder="dev@example.com"
+          placeholder="you@wardrowbe.local"
         />
       </div>
       <div className="space-y-2">
@@ -167,7 +167,7 @@ function LoginContent() {
 
       <div className="space-y-4">
         {authMode === 'oidc' && <OIDCLoginButton callbackUrl={callbackUrl} />}
-        {authMode === 'dev' && <DevLogin callbackUrl={callbackUrl} />}
+        {authMode === 'dev' && <LocalLogin callbackUrl={callbackUrl} />}
         {authMode === 'unconfigured' && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm space-y-2">
             <p className="font-medium text-destructive">No authentication method configured</p>

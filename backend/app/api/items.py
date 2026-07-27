@@ -1126,15 +1126,29 @@ async def remove_item_background(
             detail="Item has no image",
         )
 
-    hex_color = request.bg_color.lstrip("#")
-    bg_color = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    bg_color = None
+    if request.bg_color:
+        hex_color = request.bg_color.lstrip("#")
+        bg_color = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
     try:
         image_service = ImageService()
         result = await asyncio.to_thread(image_service.remove_background, item.image_path, bg_color)
+        item.image_path = result["image_path"]
+        item.medium_path = result["medium_path"]
+        item.thumbnail_path = result["thumbnail_path"]
         item.original_image_path = result["original_backup_path"]
         await db.commit()
-        await db.refresh(item, attribute_names=["original_image_path", "updated_at"])
+        await db.refresh(
+            item,
+            attribute_names=[
+                "image_path",
+                "medium_path",
+                "thumbnail_path",
+                "original_image_path",
+                "updated_at",
+            ],
+        )
         return ItemResponse.model_validate(item)
     except ImportError:
         raise HTTPException(
@@ -1154,6 +1168,122 @@ async def remove_item_background(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to remove background",
         ) from None
+
+
+@router.post("/{item_id}/ai-catalog-cutout", response_model=dict)
+async def queue_ai_catalog_cutout(
+    item_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Queue an opt-in AI catalog cutout (OpenAI images.edit + chroma matte).
+
+    Async because edits can take up to ~2 minutes. RemBG stays the free default;
+    this never runs automatically on upload. Undo via restore-original.
+    """
+    from app.services import ai_catalog_cutout
+
+    if not ai_catalog_cutout.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="AI catalog cutout is not configured. "
+            "Set AI_IMAGE_API_KEY (or AI_API_KEY) for the OpenAI Image API.",
+        )
+
+    item_service = ItemService(db)
+    item = await item_service.get_by_id(item_id, current_user.id)
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    if not item.image_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Item has no image",
+        )
+
+    try:
+        redis = await create_pool(get_redis_settings())
+        try:
+            job = await redis.enqueue_job(
+                "ai_catalog_cutout_job",
+                str(item.id),
+                item.image_path,
+                _queue_name="arq:tagging",
+            )
+            logger.info(f"Queued AI catalog cutout for item {item.id}")
+            return {"status": "queued", "job_id": job.job_id, "item_id": str(item.id)}
+        finally:
+            await redis.aclose()
+    except Exception as e:
+        logger.error(f"Failed to queue AI catalog cutout for {item_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to queue AI catalog cutout",
+        ) from None
+
+
+@router.get("/{item_id}/jobs/{job_id}")
+async def get_item_job_status(
+    item_id: UUID,
+    job_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Poll arq job status for AI catalog cutout (and other item image jobs)."""
+    item_service = ItemService(db)
+    item = await item_service.get_by_id(item_id, current_user.id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    redis = None
+    try:
+        redis = await create_pool(get_redis_settings())
+        job = Job(job_id, redis, _queue_name="arq:tagging")
+        job_status = await job.status()
+        info = await job.info()
+        result = None
+        error = None
+        # Only fetch result once finished to avoid blocking on in-flight jobs.
+        if job_status in {"complete", "not_found"}:
+            try:
+                result = await job.result(timeout=0)
+            except Exception as e:
+                error = str(e)
+        elif job_status == "failed" and info is not None:
+            error = getattr(info, "traceback", None) or "Job failed"
+
+        return {
+            "job_id": job_id,
+            "item_id": str(item_id),
+            "status": str(job_status),
+            "result": result if isinstance(result, dict) else None,
+            "error": error,
+            "enqueue_time": getattr(info, "enqueue_time", None).isoformat()
+            if getattr(info, "enqueue_time", None)
+            else None,
+            "start_time": getattr(info, "start_time", None).isoformat()
+            if getattr(info, "start_time", None)
+            else None,
+            "finish_time": getattr(info, "finish_time", None).isoformat()
+            if getattr(info, "finish_time", None)
+            else None,
+        }
+    except Exception as e:
+        logger.error(f"Failed to read job {job_id} for item {item_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to read job status",
+        ) from None
+    finally:
+        if redis:
+            await redis.aclose()
 
 
 @router.post("/{item_id}/restore-original", response_model=ItemResponse)
@@ -1179,7 +1309,7 @@ async def restore_item_original(
 
     try:
         image_service = ImageService()
-        await asyncio.to_thread(
+        restored = await asyncio.to_thread(
             image_service.restore_original, item.image_path, item.original_image_path
         )
     except ValueError as e:
@@ -1194,9 +1324,21 @@ async def restore_item_original(
             detail="Failed to restore original image",
         ) from None
 
+    item.image_path = restored["image_path"]
+    item.medium_path = restored["medium_path"]
+    item.thumbnail_path = restored["thumbnail_path"]
     item.original_image_path = None
     await db.commit()
-    await db.refresh(item, attribute_names=["original_image_path", "updated_at"])
+    await db.refresh(
+        item,
+        attribute_names=[
+            "image_path",
+            "medium_path",
+            "thumbnail_path",
+            "original_image_path",
+            "updated_at",
+        ],
+    )
     return ItemResponse.model_validate(item)
 
 

@@ -50,7 +50,7 @@ function getSourceBadge(outfit: Outfit): {
   }
   if (outfit.source === 'manual') {
     return {
-      label: 'Studio',
+      label: 'Your look',
       icon: <Shirt className="h-3 w-3" />,
       className: 'bg-purple-100 text-purple-700 border-purple-200',
     };

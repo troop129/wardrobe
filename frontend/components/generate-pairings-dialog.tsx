@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useGeneratePairings } from '@/lib/hooks/use-pairings';
 import { Item, Pairing } from '@/lib/types';
@@ -81,7 +82,25 @@ export function GeneratePairingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!generatedPairings ? (
+        {generatePairings.isPending ? (
+          <div className="space-y-5 py-6" aria-live="polite" aria-busy="true">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles className="h-6 w-6 animate-pulse text-primary" />
+            </div>
+            <div className="text-center">
+              <p className="font-medium">Finding matches for {item.name || item.type}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                AI is building {numPairings} complete outfit{numPairings === 1 ? '' : 's'} from your wardrobe…
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3" aria-hidden="true">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} className="aspect-[3/4] rounded-lg" />
+              ))}
+            </div>
+            <p className="text-center text-xs text-muted-foreground">Keep this window open while it works.</p>
+          </div>
+        ) : !generatedPairings ? (
           // Generation form
           <div className="space-y-6 py-4 min-w-0">
             {/* Source item preview */}
@@ -135,7 +154,7 @@ export function GeneratePairingsDialog({
                 {generatedPairings.length} outfit{generatedPairings.length !== 1 ? 's' : ''} created!
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                View them in the Pairings section
+                View them with your outfits
               </p>
             </div>
 
@@ -173,7 +192,7 @@ export function GeneratePairingsDialog({
         <DialogFooter>
           {!generatedPairings ? (
             <>
-              <Button variant="outline" onClick={handleClose}>
+              <Button variant="outline" onClick={handleClose} disabled={generatePairings.isPending}>
                 Cancel
               </Button>
               <Button
@@ -199,7 +218,7 @@ export function GeneratePairingsDialog({
                 Close
               </Button>
               <Button onClick={handleViewPairings}>
-                View Pairings
+                View outfits
               </Button>
             </>
           )}

@@ -15,7 +15,7 @@ COPY requirements.txt requirements-extras.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-extras.txt
 
 # Pre-download rembg model so first request is instant
-RUN python -c "from rembg import new_session; new_session()"
+RUN python -c "from rembg import new_session; new_session('isnet-general-use')"
 
 # Copy application code
 COPY . .

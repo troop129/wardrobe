@@ -128,8 +128,8 @@ function chipToFilters(chip: FilterChip, search: string): OutfitFilters {
 }
 
 const EMPTY_MESSAGES: Record<FilterChip, string> = {
-  all: 'No outfits yet. Create your first look in the Studio!',
-  'my-looks': 'No saved looks yet. Create one with the Studio editor.',
+  all: 'No outfits yet. Create your first look in the outfit builder.',
+  'my-looks': 'No saved looks yet. Create one in the outfit builder.',
   worn: 'No worn outfits recorded.',
   pairings: 'No pairing outfits generated.',
   replacements: 'No replacement outfits.',
@@ -441,7 +441,7 @@ function OutfitsPageContent() {
           <Button asChild>
             <Link href="/dashboard/outfits/new">
               <Plus className="h-4 w-4 mr-2" />
-              New Outfit
+              Create outfit
             </Link>
           </Button>
         </div>
@@ -504,7 +504,7 @@ function OutfitsPageContent() {
                 <Button asChild>
                   <Link href="/dashboard/outfits/new">
                     <Plus className="h-4 w-4 mr-2" />
-                    New Outfit
+                    Create outfit
                   </Link>
                 </Button>
               )}

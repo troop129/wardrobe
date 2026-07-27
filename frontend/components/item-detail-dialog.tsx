@@ -17,6 +17,7 @@ import {
   RotateCcw,
   RotateCw,
   Eraser,
+  Wand2,
   Undo2,
   ImagePlus,
   Layers,
@@ -67,7 +68,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { useUpdateItem, useDeleteItem, useReanalyzeItem, useRotateImage, useRemoveBackground, useRestoreOriginal, useReplaceItemImage, useLogWash, useWashHistory, useItemWearStats, useItemWearHistory, useAddItemImage, useDeleteItemImage, useSetPrimaryImage } from '@/lib/hooks/use-items';
+import { useUpdateItem, useDeleteItem, useReanalyzeItem, useRotateImage, useRemoveBackground, useAiCatalogCutout, useRestoreOriginal, useReplaceItemImage, useLogWash, useWashHistory, useItemWearStats, useItemWearHistory, useAddItemImage, useDeleteItemImage, useSetPrimaryImage } from '@/lib/hooks/use-items';
 import { Item, CLOTHING_TYPES, CLOTHING_COLORS } from '@/lib/types';
 import { ColorEyedropper } from '@/components/color-eyedropper';
 import { GeneratePairingsDialog } from '@/components/generate-pairings-dialog';
@@ -99,12 +100,19 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const [showWashHistory, setShowWashHistory] = useState(false);
   const [showWearHistory, setShowWearHistory] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageJob, setImageJob] = useState<{
+    kind: 'ai_catalog' | 'cleanup' | 'analyze';
+    label: string;
+    progress: number;
+  } | null>(null);
+  const cleanupProgressRef = useRef<number | null>(null);
 
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const reanalyzeItem = useReanalyzeItem();
   const rotateImage = useRotateImage();
   const removeBackground = useRemoveBackground();
+  const aiCatalogCutout = useAiCatalogCutout();
   const restoreOriginal = useRestoreOriginal();
   const replaceImage = useReplaceItemImage();
   const replaceImageInputRef = useRef<HTMLInputElement>(null);
@@ -215,13 +223,57 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const handleRemoveBackground = async () => {
+    setImageJob({ kind: 'cleanup', label: 'Cleaning up background…', progress: 8 });
+    if (cleanupProgressRef.current) window.clearInterval(cleanupProgressRef.current);
+    cleanupProgressRef.current = window.setInterval(() => {
+      setImageJob((prev) =>
+        prev?.kind === 'cleanup'
+          ? { ...prev, progress: Math.min(92, prev.progress + 6) }
+          : prev
+      );
+    }, 400);
     try {
       await removeBackground.mutateAsync({ id: item.id });
       setImageKey((k) => k + 1);
+      setImageJob({ kind: 'cleanup', label: 'Background cleaned', progress: 100 });
       toast.success('Background removed');
     } catch (error) {
       console.error('Failed to remove background:', error);
       toast.error('Failed to remove background');
+    } finally {
+      if (cleanupProgressRef.current) {
+        window.clearInterval(cleanupProgressRef.current);
+        cleanupProgressRef.current = null;
+      }
+      setTimeout(() => setImageJob(null), 500);
+    }
+  };
+
+  const handleAiCatalogCutout = async () => {
+    setImageJob({ kind: 'ai_catalog', label: 'Starting AI catalog cutout…', progress: 4 });
+    try {
+      await aiCatalogCutout.mutateAsync({
+        id: item.id,
+        onProgress: (status) => {
+          const mapped =
+            status.status === 'queued' || status.status === 'deferred'
+              ? { label: 'Queued for AI catalog cutout…', progress: 12 }
+              : status.status === 'in_progress'
+                ? { label: 'Generating catalog cutout…', progress: 55 }
+                : status.status === 'complete'
+                  ? { label: 'Finishing cutout…', progress: 92 }
+                  : { label: 'Working…', progress: 30 };
+          setImageJob({ kind: 'ai_catalog', ...mapped });
+        },
+      });
+      setImageKey((k) => k + 1);
+      setImageJob({ kind: 'ai_catalog', label: 'Catalog cutout ready', progress: 100 });
+      toast.success('AI catalog cutout complete');
+    } catch (error) {
+      console.error('Failed to run AI catalog cutout:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to run AI catalog cutout');
+    } finally {
+      setTimeout(() => setImageJob(null), 600);
     }
   };
 
@@ -249,6 +301,50 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const isAnalyzing = reanalyzeItem.isPending || item.status === 'processing';
+  const isImageBusy =
+    !!imageJob || removeBackground.isPending || aiCatalogCutout.isPending || isAnalyzing;
+
+  // Soft progress while AI tagging is processing (no fine-grained job %).
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setImageJob((prev) => (prev?.kind === 'analyze' ? null : prev));
+      return;
+    }
+    if (aiCatalogCutout.isPending || removeBackground.isPending) {
+      return;
+    }
+    setImageJob((prev) =>
+      prev?.kind === 'ai_catalog' || prev?.kind === 'cleanup'
+        ? prev
+        : { kind: 'analyze', label: 'AI analyzing…', progress: 18 }
+    );
+    const id = window.setInterval(() => {
+      setImageJob((prev) =>
+        prev?.kind === 'analyze'
+          ? { ...prev, progress: Math.min(88, prev.progress + 3) }
+          : prev
+      );
+    }, 800);
+    return () => window.clearInterval(id);
+  }, [isAnalyzing, aiCatalogCutout.isPending, removeBackground.isPending]);
+
+  // While the OpenAI edit is in_progress, ease the bar forward so it doesn't feel stuck.
+  useEffect(() => {
+    if (!aiCatalogCutout.isPending || imageJob?.kind !== 'ai_catalog') return;
+    if ((imageJob.progress ?? 0) < 20 || (imageJob.progress ?? 0) >= 90) return;
+    const id = window.setInterval(() => {
+      setImageJob((prev) =>
+        prev?.kind === 'ai_catalog' && prev.progress >= 20 && prev.progress < 90
+          ? {
+              ...prev,
+              label: 'Generating catalog cutout…',
+              progress: Math.min(90, prev.progress + 2),
+            }
+          : prev
+      );
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [aiCatalogCutout.isPending, imageJob?.kind, imageJob?.progress]);
 
   // Use signed URL from backend for better quality in detail view
   const imageUrl = item.image_url || item.image_path;
@@ -342,7 +438,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                   {features?.background_removal && (
                     <DropdownMenuItem
                       onClick={handleRemoveBackground}
-                      disabled={removeBackground.isPending || !item.image_url}
+                      disabled={isImageBusy || !item.image_url}
                     >
                       {removeBackground.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -352,6 +448,19 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       Remove background
                     </DropdownMenuItem>
                   )}
+                  {features?.ai_catalog_cutout && (
+                    <DropdownMenuItem
+                      onClick={handleAiCatalogCutout}
+                      disabled={isImageBusy || !item.image_url}
+                    >
+                      {aiCatalogCutout.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-4 w-4" />
+                      )}
+                      AI catalog cutout
+                    </DropdownMenuItem>
+                  )}
                   {item.original_image_path && (
                     <DropdownMenuItem onClick={handleRestoreOriginal} disabled={restoreOriginal.isPending}>
                       {restoreOriginal.isPending ? (
@@ -359,7 +468,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       ) : (
                         <Undo2 className="h-4 w-4" />
                       )}
-                      Undo background removal
+                      Undo cutout / background removal
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
@@ -446,10 +555,23 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                     </>
                   );
                 })()}
-                {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
-                    <Loader2 className="h-8 w-8 text-white animate-spin" />
-                    <span className="text-white text-sm font-medium">AI Analyzing...</span>
+                {isImageBusy && (
+                  <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center gap-3 px-6">
+                    <Loader2 className="h-7 w-7 text-white animate-spin" />
+                    <span className="text-white text-sm font-medium text-center">
+                      {imageJob?.label ||
+                        (isAnalyzing
+                          ? 'AI Analyzing…'
+                          : removeBackground.isPending
+                            ? 'Cleaning up background…'
+                            : 'Generating catalog cutout…')}
+                    </span>
+                    <div className="w-full max-w-[220px]">
+                      <Progress
+                        value={imageJob?.progress ?? (isAnalyzing ? 40 : 50)}
+                        className="h-1.5 bg-white/25 [&>div]:bg-white"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

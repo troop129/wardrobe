@@ -178,9 +178,92 @@ export function useRemoveBackground() {
       if (session?.accessToken) {
         setAccessToken(session.accessToken as string);
       }
-      return api.post<Item>(`/items/${id}/remove-background`, { bg_color: bg_color ?? '#FFFFFF' });
+      // Omit bg_color for transparent PNG cutouts (blends with gallery card color).
+      // Pass an explicit hex only when a solid replacement background is wanted.
+      return api.post<Item>(
+        `/items/${id}/remove-background`,
+        bg_color ? { bg_color } : {}
+      );
     },
     onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['item', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['outfits'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarOutfits'] });
+    },
+  });
+}
+
+export type ImageJobStatus =
+  | 'queued'
+  | 'deferred'
+  | 'in_progress'
+  | 'complete'
+  | 'failed'
+  | 'not_found'
+  | 'aborted';
+
+export interface ItemJobStatus {
+  job_id: string;
+  item_id: string;
+  status: ImageJobStatus | string;
+  result?: { status?: string; error?: string; code?: string; item_id?: string } | null;
+  error?: string | null;
+}
+
+async function pollItemJob(
+  itemId: string,
+  jobId: string,
+  onProgress?: (status: ItemJobStatus) => void,
+  {
+    intervalMs = 2000,
+    timeoutMs = 180_000,
+  }: { intervalMs?: number; timeoutMs?: number } = {}
+): Promise<ItemJobStatus> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const status = await api.get<ItemJobStatus>(`/items/${itemId}/jobs/${jobId}`);
+    onProgress?.(status);
+    if (status.status === 'complete') {
+      if (status.result?.status === 'error') {
+        throw new Error(status.result.error || status.error || 'Image job failed');
+      }
+      return status;
+    }
+    if (status.status === 'failed' || status.status === 'not_found' || status.status === 'aborted') {
+      throw new Error(status.error || `Image job ${status.status}`);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error('Timed out waiting for image job');
+}
+
+export function useAiCatalogCutout() {
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      onProgress,
+    }: {
+      id: string;
+      onProgress?: (status: ItemJobStatus) => void;
+    }) => {
+      if (session?.accessToken) {
+        setAccessToken(session.accessToken as string);
+      }
+      const queued = await api.post<{ status: string; job_id: string; item_id: string }>(
+        `/items/${id}/ai-catalog-cutout`
+      );
+      onProgress?.({
+        job_id: queued.job_id,
+        item_id: id,
+        status: 'queued',
+      });
+      return pollItemJob(id, queued.job_id, onProgress);
+    },
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['items'] });
       queryClient.invalidateQueries({ queryKey: ['item', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['outfits'] });
