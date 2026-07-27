@@ -58,15 +58,26 @@ def _has_tag_content(field: str, value: Any) -> bool:
     return value not in _EMPTY_TAG_VALUES
 
 
-async def _maybe_queue_background_removal(item_id: UUID, image_path: str) -> None:
+async def _maybe_queue_background_removal(db: AsyncSession, item_id: UUID, image_path: str) -> None:
     """Best-effort: queue automatic white-background cleanup for a freshly uploaded item.
 
     Cosmetic-only and independent of AI tagging - no-ops quietly (not an error)
     when the feature is disabled or no provider is available, and any failure to
     reach Redis is logged and swallowed rather than surfaced, so an upload never
     fails or blocks because of this.
+
+    Commits the current request transaction before enqueueing so the worker can
+    see the new row. Without that, rembg jobs race the request-end commit and
+    fail immediately with "Item not found" (tagging survives the same race only
+    because the OpenAI call takes long enough for get_db to commit first).
     """
     if not settings.auto_background_removal or not background_removal.is_available():
+        return
+
+    try:
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to commit before background removal queue for {item_id}: {e}")
         return
 
     try:
@@ -237,7 +248,7 @@ async def create_item(
     else:
         item = await item_service.mark_pending(item, set_ready=True)
 
-    await _maybe_queue_background_removal(item.id, image_paths["image_path"])
+    await _maybe_queue_background_removal(db, item.id, image_paths["image_path"])
 
     return ItemResponse.model_validate(item)
 
@@ -358,7 +369,7 @@ async def bulk_create_items(
                 )
                 successful += 1
 
-                await _maybe_queue_background_removal(item.id, image_paths["image_path"])
+                await _maybe_queue_background_removal(db, item.id, image_paths["image_path"])
 
             except ValueError as e:
                 results.append(

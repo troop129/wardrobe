@@ -26,10 +26,18 @@ async def remove_item_background_job(ctx: dict, item_id: str, image_path: str) -
             e.g. "user_id/filename.jpg") - resolved against STORAGE_PATH by
             ImageService, same as the manual /remove-background endpoint.
     """
+    # Brief retries cover the remaining race where a job was already in Redis
+    # before the upload request committed (common on bulk upload).
+    item = None
     db = get_db_session(ctx)
     try:
-        result = await db.execute(select(ClothingItem).where(ClothingItem.id == UUID(item_id)))
-        item = result.scalar_one_or_none()
+        for attempt in range(5):
+            result = await db.execute(select(ClothingItem).where(ClothingItem.id == UUID(item_id)))
+            item = result.scalar_one_or_none()
+            if item is not None:
+                break
+            await asyncio.sleep(0.5 * (attempt + 1))
+            await db.rollback()
 
         if item is None:
             logger.warning(f"Background removal job: item {item_id} not found")
