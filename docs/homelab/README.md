@@ -36,7 +36,7 @@ GitHub Actions workflows, issue/PR templates, `FUNDING.yml`, `k8s/` manifests,
 Filled in as facts were confirmed during setup — treat as the source of truth over
 anything said earlier in chat.
 
-- **Host machine**: Windows 10 Pro, hostname `desktop-lms2bct`
+- **Host machine**: Windows 11 Pro (build 26100), hostname `desktop-lms2bct`
 - **CPU**: AMD Ryzen 7 3700X (8c/16t)
 - **GPU**: NVIDIA RTX 3070 Ti (8GB VRAM) — the binding constraint for local AI model sizing
 - **RAM**: 32GB DDR4 @2666MHz (slower than typical; avoid models that spill out of VRAM)
@@ -50,7 +50,7 @@ See the todo list attached to the active plan for live status; as of this doc's
 last edit:
 
 - [x] Remote shell (SSH) access from Mac to the Windows host
-- [ ] Docker Desktop + Ollama installed on the Windows host
+- [x] Docker Desktop + Ollama installed on the Windows host
 - [ ] `.env` configured and stack deployed
 - [ ] Verified LAN access from tablet/phone
 - [ ] AI model quality/speed validated with a real upload

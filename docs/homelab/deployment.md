@@ -6,11 +6,11 @@ LAN. See [remote-access.md](./remote-access.md) for how these commands get run
 remotely from the Mac over SSH, and [ai-setup.md](./ai-setup.md) for the AI
 model choices referenced below.
 
-Status: **not yet executed** — this is the plan; check the todo list on the
-active Cursor plan (or this repo's task tracker, if promoted there) for live
-progress.
+Status: **step 1 done** (executed remotely over SSH — see gotchas below);
+steps 2+ not yet executed. Check the todo list on the active Cursor plan (or
+this repo's task tracker, if promoted there) for live progress.
 
-## 1. Install host dependencies (on the Windows PC)
+## 1. Install host dependencies (on the Windows PC) — ✅ done
 
 - **Docker Desktop** (WSL2 backend) — <https://www.docker.com/products/docker-desktop/>
   - Requires WSL2 enabled: `wsl --install` (may require a reboot).
@@ -20,6 +20,42 @@ progress.
     ollama pull llava:7b
     ollama pull gemma3:latest
     ```
+
+Installed: Docker Desktop 4.83.0 (Docker Engine 29.6.2, WSL2 backend) and
+Ollama 0.32.4, with `llava:7b` and `gemma3:latest` pulled and smoke-tested
+(container run + a live chat completion). Both are registered to auto-start
+on login (Docker Desktop does this itself; Ollama didn't, so a
+`LaunchOllamaApp` Scheduled Task was added — see gotchas below).
+
+### Gotchas hit doing this over SSH (relevant again for step 4)
+
+- **`wsl --install`/`wsl --update` failed with "The Windows Subsystem for
+  Linux is not installed"** even after enabling the
+  `Microsoft-Windows-Subsystem-Linux` / `VirtualMachinePlatform` Windows
+  optional features and rebooting. Fix: install the WSL package itself via
+  `winget install --id Microsoft.WSL --source winget` (it's published on the
+  regular winget source now, not just the Store).
+- **`winget` prompted interactively for the MS Store source agreement** and
+  hung over non-interactive SSH. Fix: always scope to
+  `--source winget --accept-source-agreements --accept-package-agreements`.
+- **GUI apps (Docker Desktop, Ollama's tray app) silently die when started
+  via `Start-Process` over SSH**, even with an active RDP session open — SSH
+  commands run in a non-interactive logon session that can't create windows.
+  Fix: register a Scheduled Task with `-Principal ... -LogonType Interactive
+  -UserId troop` targeting the real executable, then `Start-ScheduledTask`;
+  it runs inside the actual interactive (RDP) session instead.
+- **`docker pull`/`docker run` failed with `error getting credentials - err:
+  exit status 1, out: 'A specified logon session does not exist.'`** even for
+  fully public/anonymous images, and even after removing `credsStore` from
+  `~/.docker/config.json`. Root cause: Docker Desktop's credential lookup is
+  tied to the Windows logon session, and plain SSH creates a *different*
+  logon session than the interactive RDP one for the same user — this is a
+  DPAPI/logon-session mismatch, not a config problem. **Fix that actually
+  works: run `docker`/`docker compose` commands the same way as the GUI-app
+  workaround above** — via a Scheduled Task with `-LogonType Interactive`
+  that executes inside the real interactive session. Plan on doing this for
+  step 4's `docker compose pull` / `docker compose up -d` too, rather than
+  running them directly over `ssh wardrobe-win '...'`.
 
 ## 2. Get the repo onto the Windows host
 
