@@ -10,14 +10,18 @@ reconstruct decisions from chat history.
 
 ## Documents in this folder
 
-| Doc | Contents |
-|---|---|
-| [audit.md](./audit.md) | Comparison of this repo (`wardrowbe`) vs [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe), and why we're building on this one |
-| [remote-access.md](./remote-access.md) | How the dev machine (Mac) gets SSH access to the Windows host, key locations, and troubleshooting steps already hit |
-| [ai-setup.md](./ai-setup.md) | Ollama model choices sized for the actual GPU/RAM, fallback options |
-| [deployment.md](./deployment.md) | Step-by-step Windows hosting runbook (Docker, `.env`, firewall, LAN access) |
-| [roadmap.md](./roadmap.md) | Deferred/future work: gallery UI port, virtual try-on POC, remote access for a second user |
-| [reference/tandpfun-wardrobe/](./reference/tandpfun-wardrobe/README.md) | Read-only snapshot of tandpfun/wardrobe (skills, gallery UI source, screenshots) pulled in for the roadmap items above |
+
+| Doc                                                                     | Contents                                                                                                                               |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [audit.md](./audit.md)                                                  | Comparison of this repo (`wardrowbe`) vs [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe), and why we're building on this one |
+| [remote-access.md](./remote-access.md)                                  | How the dev machine (Mac) gets SSH access to the Windows host, key locations, and troubleshooting steps already hit                    |
+| [ai-setup.md](./ai-setup.md)                                            | Ollama model choices sized for the actual GPU/RAM, fallback options                                                                    |
+| [deployment.md](./deployment.md)                                        | Step-by-step Windows hosting runbook (Docker, `.env`, firewall, LAN access)                                                            |
+| [roadmap.md](./roadmap.md)                                              | Deferred/future work: gallery UI port, virtual try-on POC, remote access for a second user                                             |
+| [reference/tandpfun-wardrobe/](./reference/tandpfun-wardrobe/README.md) | Read-only snapshot of tandpfun/wardrobe (skills, gallery UI source, screenshots) pulled in for the roadmap items above                 |
+
+
+
 
 ## This fork
 
@@ -44,6 +48,8 @@ anything said earlier in chat.
 - **Dev machine**: macOS, running this Cursor session, reaches the host over SSH (see [remote-access.md](./remote-access.md))
 - **Client devices**: bedroom Android tablet/iPad (primary interface), phone, Mac browser — all LAN-only for now
 
+
+
 ## Current status
 
 See the todo list attached to the active plan for live status; as of this doc's
@@ -51,8 +57,9 @@ last edit:
 
 - [x] Remote shell (SSH) access from Mac to the Windows host
 - [x] Docker Desktop + Ollama installed on the Windows host
-- [ ] `.env` configured and stack deployed
-- [ ] Verified LAN access from tablet/phone
+- [x] `.env` configured and stack deployed
+- [x] Verified LAN access from the Mac (`curl` to `10.0.0.246:3000` + health
+      check) — not yet verified from the actual tablet/phone
 - [ ] AI model quality/speed validated with a real upload
 - [ ] Gallery UI port (from tandpfun)
 - [ ] Virtual try-on POC (from tandpfun, OpenAI `gpt-image`)

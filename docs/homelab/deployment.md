@@ -6,9 +6,11 @@ LAN. See [remote-access.md](./remote-access.md) for how these commands get run
 remotely from the Mac over SSH, and [ai-setup.md](./ai-setup.md) for the AI
 model choices referenced below.
 
-Status: **step 1 done** (executed remotely over SSH — see gotchas below);
-steps 2+ not yet executed. Check the todo list on the active Cursor plan (or
-this repo's task tracker, if promoted there) for live progress.
+Status: **steps 1–5 done** (executed remotely over SSH — see gotchas below).
+Only step 6 (log in from your actual client devices + validate AI quality)
+remains, and that's on you rather than something to automate. Check the todo
+list on the active Cursor plan (or this repo's task tracker, if promoted
+there) for live progress.
 
 ## 1. Install host dependencies (on the Windows PC) — ✅ done
 
@@ -57,7 +59,7 @@ on login (Docker Desktop does this itself; Ollama didn't, so a
   step 4's `docker compose pull` / `docker compose up -d` too, rather than
   running them directly over `ssh wardrobe-win '...'`.
 
-## 2. Get the repo onto the Windows host
+## 2. Get the repo onto the Windows host — ✅ done
 
 Either:
 - `git clone https://github.com/Anyesh/wardrowbe.git` directly on the Windows
@@ -65,7 +67,11 @@ Either:
 - Push this working copy to your own remote/fork and clone that instead (do
   **not** push a real `.env` — it's already gitignored).
 
-## 3. Configure `.env`
+Done: installed Git (`winget install --id Git.Git`) and cloned
+`https://github.com/troop129/wardrobe.git` (the personal fork, see
+[README.md](./README.md)) to `C:\Users\troop\wardrowbe`.
+
+## 3. Configure `.env` — ✅ done
 
 Copy [`.env.example`](../../.env.example) to `.env` and set:
 
@@ -88,7 +94,12 @@ Consider a **static LAN IP or DHCP reservation** for this PC in your router so
 `10.0.0.246` (or whatever it becomes) doesn't change and break bookmarks/PWA
 shortcuts on the tablet/phone.
 
-## 4. Start the stack
+Done: `.env` generated from `.env.example` with real random secrets for
+`POSTGRES_PASSWORD`/`SECRET_KEY`/`NEXTAUTH_SECRET`, `DEBUG=true`,
+`NEXTAUTH_URL=http://10.0.0.246:3000`, and the Ollama `AI_*` block left at its
+defaults.
+
+## 4. Start the stack — ✅ done
 
 ```powershell
 docker compose pull
@@ -103,7 +114,14 @@ curl http://localhost:8000/api/v1/health
 # Should return: {"status":"healthy"}
 ```
 
-## 5. Open the firewall for LAN clients
+Done: all 5 containers (`db`, `redis`, `backend`, `worker`, `frontend`) came
+up healthy, all Alembic migrations applied cleanly on first boot, and the
+health check returned `{"status":"healthy"}`. Ran via the same
+interactive-session Scheduled Task workaround as step 1's gotchas (needed for
+`docker compose pull`'s credential lookup, not for `up`/`exec`, but simplest
+to run the whole sequence that way).
+
+## 5. Open the firewall for LAN clients — ✅ done
 
 Only port **3000** (frontend) needs to be reachable from other devices — the
 frontend proxies `/api/v1/*` to the backend internally over the Docker network
@@ -117,7 +135,13 @@ New-NetFirewallRule -DisplayName "Wardrobe Frontend" -Direction Inbound -Protoco
 (Scoped to `Private` to match the network-profile fix in
 [remote-access.md](./remote-access.md); widen only if needed.)
 
-## 6. Use it from client devices
+Done: rule created, scoped to `Private`. Verified reachable from the Mac dev
+machine over the LAN — `curl http://10.0.0.246:3000` returns the frontend's
+`200 OK`, and `curl http://10.0.0.246:3000/api/v1/health` (through the
+frontend's API proxy) returns `{"status":"healthy"}`. Not yet verified from
+the actual tablet/phone — that's step 6, below.
+
+## 6. Use it from client devices — not yet done (up to you)
 
 From the tablet, phone, and Mac browser: `http://10.0.0.246:3000` (or the
 current LAN IP). Log in with dev credentials, complete onboarding, upload a
