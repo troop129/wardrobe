@@ -1057,28 +1057,22 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                   )}
 
                   {/* Notes */}
-                  <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                    <div>
-                      <p className="text-sm font-medium">Tell Wardrowbe more</p>
-                      <p className="text-xs text-muted-foreground">
-                        Share fit, fabric, care, or what you like to wear it with. We&apos;ll save the useful details to this item.
-                      </p>
-                    </div>
+                  <div className="space-y-2 pt-2 border-t">
                     <Textarea
                       value={assistantMessage}
                       onChange={(event) => setAssistantMessage(event.target.value)}
-                      placeholder="e.g. H&M oversized and soft, but low cut. Keep it clean and pair it with dark jeans."
-                      rows={3}
+                      placeholder="Add details about this item…"
+                      rows={2}
                       disabled={itemAssistant.isPending}
                     />
                     <Button
                       size="sm"
-                      className="w-full"
+                      variant="secondary"
                       disabled={!assistantMessage.trim() || itemAssistant.isPending}
                       onClick={handleItemAssistant}
                     >
                       {itemAssistant.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                      {itemAssistant.isPending ? 'Saving what you shared…' : 'Update this item'}
+                      {itemAssistant.isPending ? 'Saving…' : 'Save details'}
                     </Button>
                   </div>
 

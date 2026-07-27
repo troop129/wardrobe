@@ -86,6 +86,16 @@ def _merge_note(existing: str | None, incoming: str | None) -> str | None:
     return existing
 
 
+def _descriptive_item_name(item: ClothingItem) -> str | None:
+    """A dependable readable name when the chat model omits or keeps a vague one."""
+    fit = (item.tags or {}).get("fit")
+    parts = [item.brand, item.primary_color, fit, item.type if item.type != "unknown" else None]
+    clean = [str(part).strip() for part in parts if isinstance(part, str) and part.strip()]
+    if len(clean) < 2:
+        return None
+    return " ".join(clean).title().replace("H&M", "H&M")
+
+
 async def _maybe_queue_background_removal(db: AsyncSession, item_id: UUID, image_path: str) -> None:
     """Best-effort: queue automatic white-background cleanup for a freshly uploaded item.
 
@@ -742,6 +752,8 @@ async def apply_item_assistant(
         "Current item: " + json.dumps(snapshot) + "\n\n"
         "What the owner said: " + request.message + "\n\n"
         "Return JSON only with keys name, brand, type, subtype, primary_color, colors, tags, notes, summary. "
+        "Always provide name: make it a concise human-friendly name rebuilt from the current facts and the "
+        "owner's message (brand + color + fit/style + garment where known), even when an older name exists. "
         "Only include facts stated by the owner or already present. tags may use fit, material, pattern, style, "
         "formality, season, features, care_preferences, pairing_preferences. Keep notes as a concise durable "
         "reminder of personal preferences (not a chat transcript). Use null or [] when nothing should change."
@@ -784,6 +796,11 @@ async def apply_item_assistant(
         if clean_tags:
             item.tags = {**(item.tags or {}), **clean_tags}
             updated.append("tags")
+    generated_name = _descriptive_item_name(item)
+    if generated_name and item.name != generated_name:
+        item.name = generated_name[:100]
+        if "name" not in updated:
+            updated.append("name")
     notes = _merge_note(item.notes, data.get("notes") or request.message)
     if notes != item.notes:
         item.notes = notes
