@@ -1,10 +1,10 @@
 import asyncio
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 
-from app.config import get_settings
 from app.models.item import ClothingItem
 from app.services.image_service import ImageService
 from app.workers.db import get_db_session
@@ -12,48 +12,49 @@ from app.workers.db import get_db_session
 logger = logging.getLogger(__name__)
 
 
-async def remove_item_background_job(ctx: dict, item_id: str, image_path: str) -> dict:
-    """
-    Remove background from an item image and composite onto white.
-    Cosmetic only — never changes item status on failure.
-    """
-    logger.info("Starting background removal for item %s", item_id)
+async def remove_item_background_job(ctx: dict, item_id: str, image_path: str) -> dict[str, Any]:
+    """Composite an item's image onto a uniform white background, in the background.
 
+    Cosmetic-only and independent of AI tagging: unlike `tag_item_image`, a
+    failure here must never touch `ClothingItem.status` - the item stays fully
+    usable either way, this just quietly doesn't get a cleaned-up thumbnail.
+
+    Args:
+        ctx: arq context
+        item_id: UUID of the item to process
+        image_path: relative path to the item's original image (`item.image_path`,
+            e.g. "user_id/filename.jpg") - resolved against STORAGE_PATH by
+            ImageService, same as the manual /remove-background endpoint.
+    """
     db = get_db_session(ctx)
     try:
         result = await db.execute(select(ClothingItem).where(ClothingItem.id == UUID(item_id)))
         item = result.scalar_one_or_none()
+
         if item is None:
-            logger.warning("Background removal: item not found %s", item_id)
-            return {"status": "skipped", "reason": "item not found"}
+            logger.warning(f"Background removal job: item {item_id} not found")
+            return {"status": "error", "error": "Item not found", "item_id": item_id}
 
+        # Skip if this item has already been processed (or the user restored an
+        # original) so an automatic/backfill run never clobbers a manual restore.
         if item.original_image_path:
-            logger.info("Background removal skipped for %s (already processed or restored)", item_id)
-            return {"status": "skipped", "reason": "already has original backup"}
-
-        settings = get_settings()
-        relative_path = image_path
-        if image_path.startswith(settings.storage_path):
-            prefix = settings.storage_path.rstrip("/") + "/"
-            relative_path = image_path[len(prefix) :]
-
-        image_service = ImageService()
-
-        def _run() -> dict:
-            return image_service.remove_background(relative_path, bg_color=(255, 255, 255))
+            return {"status": "skipped", "reason": "already processed", "item_id": item_id}
 
         try:
-            removal_result = await asyncio.to_thread(_run)
-        except ImportError:
-            logger.warning("Background removal unavailable (rembg not installed) for item %s", item_id)
-            return {"status": "skipped", "reason": "provider unavailable"}
+            image_service = ImageService()
+            # remove_background is a blocking PIL/rembg call - offload it so it
+            # doesn't stall this worker's event loop (same pattern as the manual
+            # /remove-background endpoint).
+            processed = await asyncio.to_thread(
+                image_service.remove_background, image_path, (255, 255, 255)
+            )
         except Exception as e:
-            logger.exception("Background removal failed for item %s: %s", item_id, e)
-            return {"status": "error", "error": str(e)}
+            logger.warning(f"Background removal failed for item {item_id}: {e}")
+            return {"status": "error", "error": str(e), "item_id": item_id}
 
-        item.original_image_path = removal_result["original_backup_path"]
+        item.original_image_path = processed["original_backup_path"]
         await db.commit()
-        logger.info("Background removal complete for item %s", item_id)
+        logger.info(f"Removed background for item {item_id}")
         return {"status": "success", "item_id": item_id}
     finally:
         await db.close()

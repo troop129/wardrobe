@@ -56,7 +56,7 @@ export default function DashboardLayout({
       <div className="min-h-screen bg-background">
         <Sidebar />
         <MobileSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="lg:pl-72">
+        <div className="lg:pl-64">
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="py-6 px-4 sm:px-6 lg:px-8 pb-20 lg:pb-6 overflow-x-hidden">
             {children}

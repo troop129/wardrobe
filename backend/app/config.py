@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     bg_removal_model: str = Field(default="u2net")  # rembg model name
     bg_removal_url: str | None = Field(default=None)  # URL for http provider (e.g. withoutbg)
     bg_removal_api_key: str | None = Field(default=None)  # API key for http provider
+    # When true, newly uploaded items are automatically queued for background
+    # removal (cutout composited onto a white background) right after upload,
+    # and the bulk "clean up backgrounds" action becomes available in the UI.
+    # No-ops quietly (no jobs queued) when no provider is available - see
+    # background_removal.is_available().
     auto_background_removal: bool = Field(default=True)
 
     # Image processing

@@ -4,6 +4,14 @@
 
 @layer base {
   :root {
+    /* Warm, quiet gallery palette (ported from tandpfun/wardrobe's reference
+       styles: paper #f4f0e8, ink #191919, muted #66625d, line #cfc8bc)
+       mapped onto the existing shadcn token slots, so the whole app picks
+       up the calmer look without every component needing to change its
+       className. --accent stays a neutral warm tone rather than tandpfun's
+       saturated maroon, since it's used broadly for hover states (ghost
+       buttons, menus, etc.) well beyond the wardrobe grid/detail/sidebar/
+       header this pass targets. */
     --background: 40 33% 94%;
     --foreground: 0 0% 10%;
     --card: 40 40% 97%;

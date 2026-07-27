@@ -1,15 +1,20 @@
 'use client';
 
 import Image from 'next/image';
-import { Loader2, AlertCircle, RefreshCw, X, Heart, Droplets } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Heart, Droplets, Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Item } from '@/lib/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { CLOTHING_COLORS, Item } from '@/lib/types';
 import { formatWornAgo, getWornAgoColorClass } from '@/lib/utils';
-import { cn } from '@/lib/utils';
 
-export interface ItemCardProps {
+interface ItemCardProps {
   item: Item;
   selected: boolean;
   onSelect: (id: string, checked: boolean) => void;
@@ -21,6 +26,10 @@ export interface ItemCardProps {
   userTimezone: string;
 }
 
+// Flat, borderless tile (no shadows/heavy chrome) - the thumbnail itself is
+// expected to already sit on a clean white/cutout background (see the
+// background-removal feature), so the tile just frames it with quiet padding
+// instead of filling edge-to-edge.
 export function ItemCard({
   item,
   selected,
@@ -32,6 +41,7 @@ export function ItemCard({
   errorDismissed,
   userTimezone,
 }: ItemCardProps) {
+  const colorInfo = CLOTHING_COLORS.find((c) => c.value === item.primary_color);
   const isProcessing = item.status === 'processing';
   const isError = item.status === 'error' && !errorDismissed;
 
@@ -42,59 +52,62 @@ export function ItemCard({
   return (
     <button
       type="button"
-      className={cn(
-        'group relative w-full text-left transition-colors',
-        'border border-transparent hover:border-border/80',
-        selected && 'border-foreground/30 bg-muted/30'
-      )}
+      className={`group block w-full text-left border transition-colors ${
+        selected ? 'border-foreground/60' : 'border-border hover:border-foreground/30'
+      }`}
       onClick={onClick}
     >
-      <div className="relative aspect-[4/5] bg-white p-3 sm:p-4">
+      <div className="relative aspect-square bg-card p-3 sm:p-4">
         {item.thumbnail_url ? (
           <Image
             src={item.thumbnail_url}
             alt={item.name || item.type}
             fill
             className="object-contain p-2"
-            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 180px"
+            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-xs uppercase tracking-wide text-muted-foreground">
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs uppercase tracking-wide">
             {item.type}
           </div>
         )}
 
+        {/* Checkbox in top-left */}
         <div
-          className={cn(
-            'absolute top-2 left-2 z-10 transition-opacity',
+          className={`absolute top-2 left-2 z-10 transition-opacity ${
             selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          )}
+          }`}
           onClick={handleCheckboxClick}
         >
           <Checkbox
             checked={selected}
             onCheckedChange={(checked) => onSelect(item.id, checked === true)}
-            className="border-border bg-background/90"
+            className="bg-background/80 backdrop-blur-sm"
           />
         </div>
 
+        {/* Quiet monochrome status glyphs, top/bottom-right */}
         {item.favorite && (
-          <Heart className="absolute top-2 right-2 z-10 h-3.5 w-3.5 fill-foreground/70 text-foreground/70" />
+          <Heart
+            className="absolute top-2 right-2 z-10 h-3.5 w-3.5 fill-foreground/70 text-foreground/70"
+            aria-label="Favorite"
+          />
         )}
         {item.needs_wash && (
-          <Droplets className="absolute bottom-2 right-2 z-10 h-3.5 w-3.5 text-muted-foreground" />
+          <Droplets
+            className="absolute bottom-2 right-2 z-10 h-3.5 w-3.5 text-muted-foreground"
+            aria-label="Needs washing"
+          />
         )}
 
         {isProcessing && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/75 backdrop-blur-[1px]">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Analyzing
-            </span>
+          <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="h-5 w-5 text-foreground/70 animate-spin" />
+            <span className="text-foreground/70 text-[11px] uppercase tracking-wide">Analyzing</span>
             {onCancelAnalysis && (
               <Button
                 size="sm"
-                variant="ghost"
+                variant="secondary"
                 className="h-7 text-xs"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -109,16 +122,16 @@ export function ItemCard({
         )}
 
         {isError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 p-2">
-            <AlertCircle className="h-5 w-5 text-destructive/80" />
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Failed
+          <div className="absolute inset-0 bg-background/85 flex flex-col items-center justify-center gap-2 p-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <span className="text-foreground/70 text-[11px] uppercase tracking-wide text-center">
+              Analysis failed
             </span>
             <div className="flex gap-1.5">
               {onRetry && (
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="secondary"
                   className="h-7 text-xs"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -132,7 +145,7 @@ export function ItemCard({
               {onDismissError && (
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="secondary"
                   className="h-7 w-7 p-0"
                   title="Dismiss"
                   onClick={(e) => {
@@ -148,21 +161,45 @@ export function ItemCard({
         )}
       </div>
 
-      <div className="px-1 pb-3 pt-2">
-        <p className="truncate text-sm font-medium leading-tight">
-          {item.name || item.type}
-        </p>
+      <div className="p-3 border-t border-border">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sm truncate">{item.name || item.type}</p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {item.type}
+              {item.subtype && ` \u00b7 ${item.subtype}`}
+              {item.tags?.logprobs_confidence != null &&
+                ` \u00b7 ${Math.round(item.tags.logprobs_confidence * 100)}%`}
+            </p>
+          </div>
+          {colorInfo && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className="w-3.5 h-3.5 rounded-full border shrink-0 mt-0.5"
+                    style={{ backgroundColor: colorInfo.hex }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{colorInfo.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
         {item.last_worn_at ? (
-          <p className={cn('mt-0.5 text-[11px]', getWornAgoColorClass(item.last_worn_at, userTimezone))}>
+          <p className={`text-xs mt-1 ${getWornAgoColorClass(item.last_worn_at, userTimezone)}`}>
             {formatWornAgo(item.last_worn_at, userTimezone)}
           </p>
         ) : item.wear_count > 0 ? (
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground mt-1">
             Worn {item.wear_count} time{item.wear_count !== 1 ? 's' : ''}
           </p>
-        ) : (
-          <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">
-            {item.subtype ? `${item.type} · ${item.subtype}` : item.type}
+        ) : null}
+        {item.ai_confidence !== undefined && item.ai_confidence > 0 && item.status === 'ready' && (
+          <p className="text-xs text-muted-foreground mt-1">
+            AI completeness: {Math.round(item.ai_confidence * 100)}%
           </p>
         )}
       </div>
@@ -172,9 +209,9 @@ export function ItemCard({
 
 export function ItemCardSkeleton() {
   return (
-    <div className="border border-transparent">
-      <Skeleton className="aspect-[4/5] bg-white" />
-      <div className="space-y-1 px-1 pb-3 pt-2">
+    <div className="border border-border">
+      <Skeleton className="aspect-square rounded-none" />
+      <div className="p-3 border-t border-border space-y-1.5">
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
       </div>

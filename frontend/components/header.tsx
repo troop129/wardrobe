@@ -34,17 +34,17 @@ export function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-border/70 bg-background/95 px-4 backdrop-blur-sm sm:gap-x-6 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-border/70 bg-background px-4 sm:gap-x-6 sm:px-6 lg:px-8">
       <button
         type="button"
         className="-m-2.5 p-2.5 text-muted-foreground lg:hidden"
         onClick={onMenuClick}
       >
         <span className="sr-only">Open sidebar</span>
-        <Menu className="h-6 w-6" aria-hidden="true" />
+        <Menu className="h-5 w-5" aria-hidden="true" />
       </button>
 
-      <div className="h-6 w-px bg-border lg:hidden" aria-hidden="true" />
+      <div className="h-6 w-px bg-border/70 lg:hidden" aria-hidden="true" />
 
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         <div className="flex flex-1" />
@@ -52,30 +52,32 @@ export function Header({ onMenuClick }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8"
             onClick={toggleTheme}
             aria-label="Toggle theme"
           >
-            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
 
-          <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-border" aria-hidden="true" />
+          <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-border/70" aria-hidden="true" />
 
-          <div className="flex items-center gap-x-4">
-            <Avatar className="h-8 w-8">
+          <div className="flex items-center gap-x-3">
+            <Avatar className="h-7 w-7">
               <AvatarImage src={user?.avatar_url || ''} alt={user?.display_name || ''} />
-              <AvatarFallback>{getInitials(user?.display_name)}</AvatarFallback>
+              <AvatarFallback className="text-xs">{getInitials(user?.display_name)}</AvatarFallback>
             </Avatar>
-            <span className="hidden text-sm font-semibold lg:block">
+            <span className="hidden text-sm font-medium lg:block">
               {user?.display_name || 'User'}
             </span>
             <Button
               variant="ghost"
               size="icon"
+              className="h-8 w-8"
               onClick={handleLogout}
               aria-label="Sign out"
             >
-              <LogOut className="h-5 w-5" />
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>

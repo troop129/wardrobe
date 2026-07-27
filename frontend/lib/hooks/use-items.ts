@@ -740,6 +740,12 @@ export function useBulkReanalyzeItems() {
   });
 }
 
+export interface BulkBackgroundRemovalResponse {
+  queued: number;
+  failed: number;
+  errors: string[];
+}
+
 export function useBulkRemoveBackgroundItems() {
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -749,9 +755,12 @@ export function useBulkRemoveBackgroundItems() {
       if (session?.accessToken) {
         setAccessToken(session.accessToken as string);
       }
-      return api.post<BulkAnalyzeResponse>('/items/bulk/remove-background', params);
+      return api.post<BulkBackgroundRemovalResponse>('/items/bulk/remove-background', params);
     },
-    onSettled: () => {
+    onSuccess: () => {
+      // Jobs process asynchronously in the background, so just invalidate to
+      // pick up whatever's already finished; items still queued will show
+      // their cleaned-up thumbnail next time the list refetches.
       queryClient.invalidateQueries({ queryKey: ['items'] });
     },
   });

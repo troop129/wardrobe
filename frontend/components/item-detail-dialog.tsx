@@ -27,6 +27,7 @@ import {
   Plus,
   Star,
   ImageIcon,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,6 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,7 +99,6 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const [showWashHistory, setShowWashHistory] = useState(false);
   const [showWearHistory, setShowWearHistory] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [showMoreActions, setShowMoreActions] = useState(false);
 
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
@@ -124,7 +131,6 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       });
       setIsEditing(false);
       setActiveImageIndex(0);
-      setShowMoreActions(false);
     }
   }, [item?.id]);
 
@@ -260,152 +266,134 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden [&>button]:hidden">
           {/* Header - sticky */}
-          <DialogHeader className="flex flex-col space-y-0 p-0 border-b flex-shrink-0">
-            <div className="flex flex-row items-center justify-between space-y-0 p-4">
-              <DialogTitle className="text-xl min-w-0 truncate">
-                {item.name || typeInfo?.label || item.type}
-              </DialogTitle>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleToggleFavorite}
-                  disabled={updateItem.isPending}
-                  title="Toggle favorite"
-                >
-                  <Heart
-                    className={`h-5 w-5 ${
-                      item.favorite ? 'fill-foreground text-foreground' : 'text-muted-foreground'
-                    }`}
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsEditing(!isEditing)}
-                  title={isEditing ? 'Cancel editing' : 'Edit item'}
-                >
-                  {isEditing ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Pencil className="h-5 w-5" />
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden sm:inline-flex text-xs"
-                  onClick={() => setShowMoreActions((v) => !v)}
-                >
-                  {showMoreActions ? 'Less' : 'More'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="sm:hidden"
-                  onClick={() => setShowMoreActions((v) => !v)}
-                  title="More actions"
-                >
-                  <ChevronDown
-                    className={`h-5 w-5 transition-transform ${showMoreActions ? 'rotate-180' : ''}`}
-                  />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full" title="Close">
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-            {showMoreActions && (
-              <div className="flex flex-wrap items-center gap-1 border-t px-4 py-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setShowPairingsDialog(true)}
-                  disabled={item.status !== 'ready'}
-                >
-                  <Layers className="h-3.5 w-3.5 mr-1.5" />
-                  Pairings
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={handleReanalyze}
-                  disabled={isAnalyzing}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
-                  Re-analyze
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => handleRotate('ccw')}
-                  disabled={rotateImage.isPending}
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  Rotate left
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => handleRotate('cw')}
-                  disabled={rotateImage.isPending}
-                >
-                  <RotateCw className="h-3.5 w-3.5 mr-1.5" />
-                  Rotate right
-                </Button>
-                {features?.background_removal && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={handleRemoveBackground}
-                    disabled={removeBackground.isPending || !item.image_url}
-                  >
-                    <Eraser className="h-3.5 w-3.5 mr-1.5" />
-                    Clean background
-                  </Button>
-                )}
-                {item.original_image_path && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={handleRestoreOriginal}
-                    disabled={restoreOriginal.isPending}
-                  >
-                    <Undo2 className="h-3.5 w-3.5 mr-1.5" />
-                    Restore photo
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => replaceImageInputRef.current?.click()}
-                  disabled={replaceImage.isPending}
-                >
-                  <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
-                  Replace image
-                </Button>
-                <input
-                  ref={replaceImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleReplaceImage(file);
-                    }
-                    e.target.value = '';
-                  }}
+          <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-4 border-b flex-shrink-0">
+            <DialogTitle className="text-xl min-w-0 truncate">
+              {item.name || typeInfo?.label || item.type}
+            </DialogTitle>
+            <div className="flex items-center gap-1">
+              {/* Primary actions - always visible */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleToggleFavorite}
+                disabled={updateItem.isPending}
+                title="Toggle favorite"
+              >
+                <Heart
+                  className={`h-5 w-5 ${
+                    item.favorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
+                  }`}
                 />
-              </div>
-            )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditing(!isEditing)}
+                title={isEditing ? 'Cancel editing' : 'Edit item'}
+              >
+                {isEditing ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Pencil className="h-5 w-5" />
+                )}
+              </Button>
+
+              {/* Secondary/less-common actions - tucked behind a single overflow
+                  menu instead of a wall of icon buttons */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" title="More actions">
+                    <MoreHorizontal className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuItem
+                    onClick={() => setShowPairingsDialog(true)}
+                    disabled={item.status !== 'ready'}
+                  >
+                    <Layers className="h-4 w-4" />
+                    Find matching outfits
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleReanalyze} disabled={isAnalyzing}>
+                    {isAnalyzing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {isAnalyzing ? 'Analysis in progress…' : 'Re-analyze with AI'}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleRotate('ccw')} disabled={rotateImage.isPending}>
+                    {rotateImage.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    Rotate left
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleRotate('cw')} disabled={rotateImage.isPending}>
+                    {rotateImage.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCw className="h-4 w-4" />
+                    )}
+                    Rotate right
+                  </DropdownMenuItem>
+                  {features?.background_removal && (
+                    <DropdownMenuItem
+                      onClick={handleRemoveBackground}
+                      disabled={removeBackground.isPending || !item.image_url}
+                    >
+                      {removeBackground.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Eraser className="h-4 w-4" />
+                      )}
+                      Remove background
+                    </DropdownMenuItem>
+                  )}
+                  {item.original_image_path && (
+                    <DropdownMenuItem onClick={handleRestoreOriginal} disabled={restoreOriginal.isPending}>
+                      {restoreOriginal.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-4 w-4" />
+                      )}
+                      Undo background removal
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => replaceImageInputRef.current?.click()}
+                    disabled={replaceImage.isPending}
+                  >
+                    {replaceImage.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="h-4 w-4" />
+                    )}
+                    Replace image
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <input
+                ref={replaceImageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleReplaceImage(file);
+                  }
+                  e.target.value = '';
+                }}
+              />
+
+              <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full" title="Close">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </DialogHeader>
 
           {/* Scrollable content */}
@@ -413,7 +401,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
             <div className="grid gap-6 sm:grid-cols-2 [&>*]:min-w-0">
             {/* Image Gallery */}
             <div className="space-y-2">
-              <div className="relative aspect-square bg-white rounded-lg overflow-hidden border border-border/60">
+              <div className="relative aspect-square bg-muted rounded-lg overflow-hidden">
                 {(() => {
                   const allImages = [
                     { url: `${imageUrl}&v=${imageKey}`, id: 'primary' },
@@ -427,7 +415,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                         src={currentImage.url}
                         alt={item.name || item.type}
                         fill
-                        className="object-contain p-4"
+                        className="object-cover"
                         sizes="(max-width: 640px) 100vw, 50vw"
                       />
                       {allImages.length > 1 && (

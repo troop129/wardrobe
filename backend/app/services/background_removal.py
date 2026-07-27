@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 from abc import ABC, abstractmethod
 from io import BytesIO
@@ -82,9 +83,24 @@ def get_provider() -> BackgroundRemovalProvider:
     return _provider
 
 
-def is_background_removal_available() -> bool:
+def is_available() -> bool:
+    """Best-effort check for whether a background-removal provider can actually work.
+
+    Used to gate automatic (on-upload) and bulk background removal so they no-op
+    quietly instead of queuing jobs that would just fail (e.g. rembg not installed,
+    or BG_REMOVAL_PROVIDER=http with no reachable BG_REMOVAL_URL).
+
+    Note: RembgProvider defers its `import rembg` until first use (loading the
+    model session is expensive), so get_provider() alone always succeeds for the
+    default "rembg" setting even when the optional rembg package isn't installed.
+    Check module resolvability separately for that case, without importing it
+    (avoids the download/session-load cost just to answer "is this available?").
+    """
     try:
-        get_provider()
-        return True
+        provider = get_provider()
     except Exception:
         return False
+
+    if isinstance(provider, RembgProvider):
+        return importlib.util.find_spec("rembg") is not None
+    return True

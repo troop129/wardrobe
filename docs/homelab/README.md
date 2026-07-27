@@ -10,7 +10,6 @@ reconstruct decisions from chat history.
 
 ## Documents in this folder
 
-
 | Doc                                                                     | Contents                                                                                                                               |
 | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | [audit.md](./audit.md)                                                  | Comparison of this repo (`wardrowbe`) vs [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe), and why we're building on this one |
@@ -19,9 +18,6 @@ reconstruct decisions from chat history.
 | [deployment.md](./deployment.md)                                        | Step-by-step Windows hosting runbook (Docker, `.env`, firewall, LAN access)                                                            |
 | [roadmap.md](./roadmap.md)                                              | Deferred/future work: gallery UI port, virtual try-on POC, remote access for a second user                                             |
 | [reference/tandpfun-wardrobe/](./reference/tandpfun-wardrobe/README.md) | Read-only snapshot of tandpfun/wardrobe (skills, gallery UI source, screenshots) pulled in for the roadmap items above                 |
-
-
-
 
 ## This fork
 
@@ -48,8 +44,6 @@ anything said earlier in chat.
 - **Dev machine**: macOS, running this Cursor session, reaches the host over SSH (see [remote-access.md](./remote-access.md))
 - **Client devices**: bedroom Android tablet/iPad (primary interface), phone, Mac browser — all LAN-only for now
 
-
-
 ## Current status
 
 See the todo list attached to the active plan for live status; as of this doc's
@@ -65,7 +59,10 @@ last edit:
       via `GET /api/v1/capabilities` (see [ai-setup.md](./ai-setup.md))
 - [ ] AI output quality validated with a real upload/wardrobe (the provider
       choice above used a synthetic benchmark, not real items yet)
-- [x] Gallery UI port (from tandpfun) — clean grid/cards, calmer shell, auto +
-      bulk white-background thumbnails via rembg
+- [x] Gallery UI port (from tandpfun) — restyled wardrobe grid/item cards,
+      item detail dialog, sidebar and header to tandpfun's calmer, flatter
+      look, plus automatic + bulk white-background thumbnails using the
+      existing free/local background-removal pipeline (see
+      [roadmap.md](./roadmap.md#1-gallery-ui-port-from-tandpfunwardrobe))
 - [ ] Virtual try-on POC (from tandpfun, OpenAI `gpt-image`)
 - [ ] Remote access for second user (deferred — Cloudflare Tunnel direction)

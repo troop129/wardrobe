@@ -7,6 +7,7 @@ from sqlalchemy import update
 from app.config import get_settings
 from app.models.item import ClothingItem, ItemStatus
 from app.services.ai_service import AIService
+from app.workers.background import remove_item_background_job
 from app.workers.db import close_db, get_db_session, init_db
 from app.workers.notifications import (
     check_scheduled_notifications,
@@ -17,7 +18,6 @@ from app.workers.notifications import (
     update_learning_profiles,
 )
 from app.workers.settings import get_redis_settings
-from app.workers.background import remove_item_background_job
 from app.workers.tagging import tag_item_image
 
 logger = logging.getLogger(__name__)

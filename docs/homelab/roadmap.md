@@ -1,21 +1,34 @@
 # Roadmap: after the base deployment is stable
 
-These are deliberately sequenced *after* [deployment.md](./deployment.md) is
+These are deliberately sequenced _after_ [deployment.md](./deployment.md) is
 working end-to-end (LAN access, AI tagging validated). See
 [audit.md](./audit.md) for why these specific items were chosen.
 
-## 1. Gallery UI port (from tandpfun/wardrobe)
+## 1. Gallery UI port (from tandpfun/wardrobe) — done
 
-**Status: done** — wardrobe grid, item cards, item detail dialog, and a calmer
-sidebar/header shell. Thumbnails use the existing free `rembg` pipeline:
-automatic white-background cutouts on upload (`AUTO_BACKGROUND_REMOVAL`, default
-on) plus a bulk “clean up backgrounds” action in the wardrobe toolbar.
+Frontend-only visual refresh of the wardrobe item grid/detail views to match
+tandpfun's cleaner, card-based gallery look.
 
 - Scope: [`frontend/components`](../../frontend/components) — item cards, grid
-  layout, item detail dialog, sidebar/header. Backend: arq job +
-  `POST /items/bulk/remove-background` (no data-model changes).
-- Paid OpenAI `gpt-image` product-shot regeneration (tandpfun import skill
-  style) remains **deferred** — see item 2 and [ai-setup.md](./ai-setup.md).
+  layout, item detail dialog, plus the sidebar/header shell (fewer/quieter
+  icons, calmer palette). No backend/data-model changes on the UI side.
+- Approach: a design pass on existing components rather than a rewrite — kept
+  all current functionality (bulk actions, filters, wash tracking badges,
+  etc.), just restyled the presentation layer. New warm/quiet palette tokens
+  live in [`frontend/app/globals.css`](../../frontend/app/globals.css); the
+  item detail dialog's dense icon toolbar was regrouped into primary actions
+  (favorite/edit/close) plus a secondary overflow menu.
+- **AI thumbnails**: rather than a new paid image-generation feature, this
+  extended the existing free/local `rembg`-based background-removal pipeline
+  (`backend/app/services/image_service.py`) to run automatically on upload
+  (`auto_background_removal` config flag, gated on
+  `background_removal.is_available()`) and added a bulk "clean up
+  backgrounds" action (`POST /items/bulk/remove-background`,
+  `useBulkRemoveBackgroundItems`) so every item ends up on a neat, uniform
+  white background at no extra cost. A paid AI-generated-thumbnail approach
+  stays a deferred future option — same bucket as item 2 below.
+- No dependency on any AI/API changes — this stayed safe to do without
+  touching the paid-AI provider setup.
 
 ## 2. Virtual try-on proof of concept (from tandpfun/wardrobe)
 

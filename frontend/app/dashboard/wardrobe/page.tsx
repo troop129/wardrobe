@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Search, Grid3X3, Loader2, AlertCircle, ArrowUpDown, SlidersHorizontal, X, Heart, Droplets } from 'lucide-react';
+import { Plus, Search, Grid3X3, Loader2, AlertCircle, ArrowUpDown, SlidersHorizontal, Heart, Droplets, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,22 +15,12 @@ import {
 } from '@/components/ui/select';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { ItemDetailDialog } from '@/components/item-detail-dialog';
-import { BulkActionToolbar, BulkSelection } from '@/components/bulk-action-toolbar';
 import { ItemCard, ItemCardSkeleton } from '@/components/item-card';
-import { WardrobeCategoryNav } from '@/components/wardrobe-category-nav';
-import {
-  useItems,
-  useItem,
-  useItemTypes,
-  useReanalyzeItem,
-  useCancelAnalysis,
-  useBulkDeleteItems,
-  useBulkReanalyzeItems,
-  useBulkRemoveBackgroundItems,
-  BulkOperationParams,
-} from '@/lib/hooks/use-items';
-import { useFeatures } from '@/lib/hooks/use-features';
+import { BulkActionToolbar, BulkSelection } from '@/components/bulk-action-toolbar';
+import { useItems, useItem, useItemTypes, useReanalyzeItem, useCancelAnalysis, useBulkDeleteItems, useBulkReanalyzeItems, useBulkRemoveBackgroundItems, BulkOperationParams } from '@/lib/hooks/use-items';
 import { useUserProfile } from '@/lib/hooks/use-user';
+import { useFeatures } from '@/lib/hooks/use-features';
+import { CLOTHING_TYPES } from '@/lib/types';
 import { toast } from 'sonner';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -166,12 +156,12 @@ export default function WardrobePage() {
   // Fetch items with automatic polling (faster when items are processing)
   const { data, isLoading, error } = useItems(filters, page, pageSize);
   const { data: itemTypes } = useItemTypes();
+  const { data: features } = useFeatures();
   const reanalyze = useReanalyzeItem();
   const cancelAnalysis = useCancelAnalysis();
   const bulkDelete = useBulkDeleteItems();
   const bulkReanalyze = useBulkReanalyzeItems();
   const bulkRemoveBackground = useBulkRemoveBackgroundItems();
-  const { data: features } = useFeatures();
 
   const items = data?.items || [];
   const total = data?.total || 0;
@@ -307,7 +297,7 @@ export default function WardrobePage() {
     const params = getBulkParams();
     try {
       const result = await bulkRemoveBackground.mutateAsync(params);
-      toast.success(`Queued ${result.queued} items for background cleanup`);
+      toast.success(`Queued ${result.queued} item${result.queued !== 1 ? 's' : ''} for background cleanup`);
       if (result.failed > 0) {
         toast.error(`Failed to queue ${result.failed} items`);
       }
@@ -322,41 +312,82 @@ export default function WardrobePage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            {total} {total === 1 ? 'piece' : 'pieces'}
-          </p>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center justify-between sm:justify-start gap-3">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground">
+                My Wardrobe
+              </p>
+              <h1 className="text-lg font-medium tracking-tight">
+                {total} item{total !== 1 ? 's' : ''}
+              </h1>
+            </div>
+            <Button onClick={() => setAddDialogOpen(true)} className="sm:hidden" size="sm">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
           {(processingCount > 0 || errorCount > 0) && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 mt-2">
               {processingCount > 0 && (
-                <Badge variant="secondary" className="gap-1 text-xs font-normal">
+                <Badge variant="secondary" className="gap-1 text-xs">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   {processingCount} analyzing
                 </Badge>
               )}
               {errorCount > 0 && (
-                <Badge variant="destructive" className="gap-1 text-xs font-normal">
+                <Badge variant="destructive" className="gap-1 text-xs">
                   <AlertCircle className="h-3 w-3" />
                   {errorCount} failed
                 </Badge>
               )}
             </div>
           )}
-          <WardrobeCategoryNav
-            activeType={typeFilter}
-            onTypeChange={(value) => {
-              setTypeFilter(value);
-              setPage(1);
-            }}
-            itemTypes={itemTypes}
-          />
         </div>
-        <Button onClick={() => setAddDialogOpen(true)} className="hidden sm:inline-flex shrink-0">
+        <Button onClick={() => setAddDialogOpen(true)} className="hidden sm:flex">
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
+      </div>
+
+      {/* Category filter, always visible - horizontally scrollable so it holds up
+          with any number of item types instead of wrapping into a wall of pills */}
+      <div className="flex overflow-x-auto -mx-1 px-1 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => {
+            setTypeFilter('all');
+            setPage(1);
+          }}
+          className={`shrink-0 border px-4 py-2 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+            typeFilter === 'all'
+              ? 'bg-foreground text-background border-foreground'
+              : 'text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          All
+        </button>
+        {(itemTypes ?? []).map((t) => {
+          const label = CLOTHING_TYPES.find((ct) => ct.value === t.type)?.label ?? t.type;
+          return (
+            <button
+              key={t.type}
+              type="button"
+              onClick={() => {
+                setTypeFilter(t.type);
+                setPage(1);
+              }}
+              className={`shrink-0 -ml-px border px-4 py-2 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+                typeFilter === t.type
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="space-y-3">
@@ -375,15 +406,6 @@ export default function WardrobePage() {
             />
           </div>
           <div className="flex gap-2">
-            <Button
-              onClick={() => setAddDialogOpen(true)}
-              className="sm:hidden shrink-0"
-              size="icon"
-              variant="outline"
-              aria-label="Add item"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
             <Select
               value={String(sortIndex)}
               onValueChange={(v) => {
@@ -421,7 +443,7 @@ export default function WardrobePage() {
 
         {/* Expandable filter row */}
         {showFilters && (
-          <div className="flex flex-wrap gap-2 items-center p-3 rounded-md border border-border/80 bg-card/40">
+          <div className="flex flex-wrap gap-2 items-center p-3 border bg-muted/30">
             <Select
               value={String(pageSize)}
               onValueChange={(value) => {
@@ -501,7 +523,7 @@ export default function WardrobePage() {
           </Button>
         </div>
       ) : isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
             <ItemCardSkeleton key={i} />
           ))}
@@ -530,7 +552,7 @@ export default function WardrobePage() {
           <EmptyWardrobe onAddClick={() => setAddDialogOpen(true)} />
         )
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-5 gap-y-8 pb-20">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pb-20">
           {items.map((item) => {
             // Determine if item is selected based on selection mode
             const isSelected = selection.mode === 'all'

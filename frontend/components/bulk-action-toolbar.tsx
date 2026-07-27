@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Trash2, RefreshCw, Loader2, CheckSquare, Square, MinusSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser } from 'lucide-react';
+import { X, Trash2, RefreshCw, Eraser, Loader2, CheckSquare, Square, MinusSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -153,6 +153,7 @@ export function BulkActionToolbar({
               onClick={onReanalyze}
               disabled={isReanalyzing}
               aria-label="Re-analyze"
+              title="Re-analyze"
             >
               {isReanalyzing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
