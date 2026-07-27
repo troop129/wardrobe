@@ -144,12 +144,15 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     }
   }, [item?.id]);
 
-  if (!item) return null;
+  // Event handlers are only reachable from the dialog below, which is not
+  // rendered without an item. Keep hooks unconditional so opening an item
+  // never changes the component's hook order.
+  const activeItem = item!;
 
   const handleSave = async () => {
     try {
       await updateItem.mutateAsync({
-        id: item.id,
+        id: activeItem.id,
         data: {
           name: editForm.name || undefined,
           type: editForm.type,
@@ -169,7 +172,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
 
   const handleMarkWashed = async () => {
     try {
-      await logWash.mutateAsync({ id: item.id });
+      await logWash.mutateAsync({ id: activeItem.id });
       toast.success('Marked as washed');
     } catch (error) {
       console.error('Failed to log wash:', error);
@@ -179,11 +182,11 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
 
   const handleDelete = async () => {
     try {
-      await deleteItem.mutateAsync(item.id);
+      await deleteItem.mutateAsync(activeItem.id);
       setShowDeleteConfirm(false);
       onOpenChange(false);
       toast.success('Item deleted', {
-        description: item.name ? `"${item.name}" has been removed.` : 'Item removed from your wardrobe.',
+        description: activeItem.name ? `"${activeItem.name}" has been removed.` : 'Item removed from your wardrobe.',
       });
     } catch (error) {
       console.error('Failed to delete item:', error);
@@ -196,8 +199,8 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const handleToggleFavorite = async () => {
     try {
       await updateItem.mutateAsync({
-        id: item.id,
-        data: { favorite: !item.favorite },
+        id: activeItem.id,
+        data: { favorite: !activeItem.favorite },
       });
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
@@ -206,7 +209,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
 
   const handleReanalyze = async () => {
     try {
-      await reanalyzeItem.mutateAsync(item.id);
+      await reanalyzeItem.mutateAsync(activeItem.id);
       // Status will update to 'processing' and UI will reflect it
     } catch (error) {
       console.error('Failed to trigger re-analysis:', error);
@@ -215,7 +218,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
 
   const handleRotate = async (direction: 'cw' | 'ccw') => {
     try {
-      await rotateImage.mutateAsync({ id: item.id, direction });
+      await rotateImage.mutateAsync({ id: activeItem.id, direction });
       setImageKey((k) => k + 1);
       toast.success('Image rotated');
     } catch (error) {
@@ -235,7 +238,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       );
     }, 400);
     try {
-      await removeBackground.mutateAsync({ id: item.id });
+      await removeBackground.mutateAsync({ id: activeItem.id });
       setImageKey((k) => k + 1);
       setImageJob({ kind: 'cleanup', label: 'Background cleaned', progress: 100 });
       toast.success('Background removed');
@@ -255,7 +258,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     setImageJob({ kind: 'ai_catalog', label: 'Starting AI catalog cutout…', progress: 4 });
     try {
       await aiCatalogCutout.mutateAsync({
-        id: item.id,
+        id: activeItem.id,
         onProgress: (status) => {
           const mapped =
             status.status === 'queued' || status.status === 'deferred'
@@ -292,7 +295,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
 
   const handleRestoreOriginal = async () => {
     try {
-      await restoreOriginal.mutateAsync(item.id);
+      await restoreOriginal.mutateAsync(activeItem.id);
       setImageKey((k) => k + 1);
       toast.success('Original image restored');
     } catch (error) {
@@ -313,7 +316,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     }
   };
 
-  const isAnalyzing = reanalyzeItem.isPending || item.status === 'processing';
+  const isAnalyzing = reanalyzeItem.isPending || item?.status === 'processing';
   const isImageBusy =
     !!imageJob || removeBackground.isPending || aiCatalogCutout.isPending || isAnalyzing;
 
@@ -358,6 +361,8 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     }, 1500);
     return () => window.clearInterval(id);
   }, [aiCatalogCutout.isPending, imageJob?.kind, imageJob?.progress]);
+
+  if (!item) return null;
 
   // Use signed URL from backend for better quality in detail view
   const imageUrl = item.image_url || item.image_path;
