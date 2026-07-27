@@ -68,7 +68,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { useUpdateItem, useDeleteItem, useReanalyzeItem, useRotateImage, useRemoveBackground, useAiCatalogCutout, useRestoreOriginal, useReplaceItemImage, useLogWash, useWashHistory, useItemWearStats, useItemWearHistory, useAddItemImage, useDeleteItemImage, useSetPrimaryImage } from '@/lib/hooks/use-items';
+import { useUpdateItem, useDeleteItem, useReanalyzeItem, useRotateImage, useRemoveBackground, useAiCatalogCutout, useRestoreOriginal, useReplaceItemImage, useLogWash, useWashHistory, useItemWearStats, useItemWearHistory, useAddItemImage, useDeleteItemImage, useSetPrimaryImage, useItemAssistant } from '@/lib/hooks/use-items';
 import { Item, CLOTHING_TYPES, CLOTHING_COLORS } from '@/lib/types';
 import { ColorEyedropper } from '@/components/color-eyedropper';
 import { GeneratePairingsDialog } from '@/components/generate-pairings-dialog';
@@ -106,6 +106,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     progress: number;
   } | null>(null);
   const cleanupProgressRef = useRef<number | null>(null);
+  const [assistantMessage, setAssistantMessage] = useState('');
 
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
@@ -113,6 +114,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const rotateImage = useRotateImage();
   const removeBackground = useRemoveBackground();
   const aiCatalogCutout = useAiCatalogCutout();
+  const itemAssistant = useItemAssistant();
   const restoreOriginal = useRestoreOriginal();
   const replaceImage = useReplaceItemImage();
   const replaceImageInputRef = useRef<HTMLInputElement>(null);
@@ -274,6 +276,17 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       toast.error(error instanceof Error ? error.message : 'Failed to run AI catalog cutout');
     } finally {
       setTimeout(() => setImageJob(null), 600);
+    }
+  };
+
+  const handleItemAssistant = async () => {
+    if (!item || !assistantMessage.trim()) return;
+    try {
+      const result = await itemAssistant.mutateAsync({ id: item.id, message: assistantMessage.trim() });
+      setAssistantMessage('');
+      toast.success(result.summary || 'Saved your item details');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save those details');
     }
   };
 
@@ -1039,6 +1052,31 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                   )}
 
                   {/* Notes */}
+                  <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                    <div>
+                      <p className="text-sm font-medium">Tell Wardrowbe more</p>
+                      <p className="text-xs text-muted-foreground">
+                        Share fit, fabric, care, or what you like to wear it with. We&apos;ll save the useful details to this item.
+                      </p>
+                    </div>
+                    <Textarea
+                      value={assistantMessage}
+                      onChange={(event) => setAssistantMessage(event.target.value)}
+                      placeholder="e.g. H&M oversized and soft, but low cut. Keep it clean and pair it with dark jeans."
+                      rows={3}
+                      disabled={itemAssistant.isPending}
+                    />
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={!assistantMessage.trim() || itemAssistant.isPending}
+                      onClick={handleItemAssistant}
+                    >
+                      {itemAssistant.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                      {itemAssistant.isPending ? 'Saving what you shared…' : 'Update this item'}
+                    </Button>
+                  </div>
+
                   {item.notes && (
                     <div className="space-y-1 pt-2 border-t">
                       <p className="text-sm font-medium">Notes</p>

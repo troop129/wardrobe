@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,7 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateItem, useBulkCreateItems, BulkUploadResponse } from '@/lib/hooks/use-items';
+import { useCreateItem, useBulkCreateItems, useItemAssistant, BulkUploadResponse } from '@/lib/hooks/use-items';
 import { CLOTHING_TYPES, CLOTHING_COLORS } from '@/lib/types';
 
 interface AddItemDialogProps {
@@ -71,6 +72,7 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
 
   const createItem = useCreateItem();
   const bulkCreateItems = useBulkCreateItems();
+  const itemAssistant = useItemAssistant();
 
   // Cleanup blob URLs on unmount to prevent memory leaks
   useEffect(() => {
@@ -139,7 +141,11 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
     if (notes) formData.append('notes', notes);
 
     try {
-      await createItem.mutateAsync(formData);
+      const created = await createItem.mutateAsync(formData);
+      if (notes.trim()) {
+        await itemAssistant.mutateAsync({ id: created.id, message: notes.trim() });
+        toast.success('Item added and your details were saved');
+      }
       handleClose();
     } catch (error) {
       console.error('Failed to create item:', error);
@@ -175,7 +181,7 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
 
   const handleCloseRequest = () => {
     // Show confirmation if there are unsaved files and not currently uploading
-    if (hasUnsavedFiles && !createItem.isPending && !bulkCreateItems.isPending) {
+    if (hasUnsavedFiles && !createItem.isPending && !itemAssistant.isPending && !bulkCreateItems.isPending) {
       setShowCloseConfirm(true);
     } else {
       handleClose();
@@ -353,13 +359,17 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Input
+                  <Label htmlFor="notes">Tell us about this item <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Textarea
                     id="notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Any additional notes..."
+                    placeholder="Fit, fabric, care, what you like to wear it with…"
+                    rows={3}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Your details are saved with the item. After upload, use “Tell Wardrowbe more” to turn them into tags too.
+                  </p>
                 </div>
               </div>
 
@@ -369,12 +379,12 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={!file || createItem.isPending}
+                  disabled={!file || createItem.isPending || itemAssistant.isPending}
                 >
-                  {createItem.isPending ? (
+                  {createItem.isPending || itemAssistant.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Uploading...
+                      {createItem.isPending ? 'Uploading…' : 'Saving details…'}
                     </>
                   ) : (
                     'Add Item'

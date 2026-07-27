@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -26,6 +28,8 @@ from app.schemas.item import (
     BulkUploadResponse,
     BulkUploadResult,
     ItemCreate,
+    ItemAssistantRequest,
+    ItemAssistantResponse,
     ItemFilter,
     ItemImageResponse,
     ItemListResponse,
@@ -40,6 +44,7 @@ from app.schemas.item import (
 from app.services import background_removal
 from app.services.image_service import ImageService
 from app.services.item_service import ItemService
+from app.services.ai_service import AIDisabledError, AIService
 from app.utils.auth import get_current_user
 from app.workers.settings import get_redis_settings
 
@@ -56,6 +61,29 @@ def _has_tag_content(field: str, value: Any) -> bool:
     if field == "tags" and isinstance(value, dict):
         return any(v not in _EMPTY_TAG_VALUES for v in value.values())
     return value not in _EMPTY_TAG_VALUES
+
+
+def _assistant_json(content: str) -> dict[str, Any] | None:
+    """Extract the small JSON object requested from a chat model response."""
+    try:
+        return json.loads(content.strip())
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", content)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+
+
+def _merge_note(existing: str | None, incoming: str | None) -> str | None:
+    incoming = incoming.strip() if isinstance(incoming, str) else ""
+    if not incoming:
+        return existing
+    if not existing or incoming.lower() not in existing.lower():
+        return f"{existing.strip()}\n{incoming}".strip() if existing else incoming
+    return existing
 
 
 async def _maybe_queue_background_removal(db: AsyncSession, item_id: UUID, image_path: str) -> None:
@@ -691,6 +719,83 @@ async def update_item(
 
     item = await item_service.update(item, item_data)
     return ItemResponse.model_validate(item)
+
+
+@router.post("/{item_id}/assistant", response_model=ItemAssistantResponse)
+async def apply_item_assistant(
+    item_id: UUID,
+    request: ItemAssistantRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ItemAssistantResponse:
+    """Turn a person's item notes into durable tags while preserving their words."""
+    item = await ItemService(db).get_by_id(item_id, current_user.id)
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    snapshot = {
+        "type": item.type, "subtype": item.subtype, "name": item.name,
+        "brand": item.brand, "colors": item.colors, "primary_color": item.primary_color,
+        "tags": item.tags or {}, "notes": item.notes,
+    }
+    prompt = (
+        "Current item: " + json.dumps(snapshot) + "\n\n"
+        "What the owner said: " + request.message + "\n\n"
+        "Return JSON only with keys name, brand, type, subtype, primary_color, colors, tags, notes, summary. "
+        "Only include facts stated by the owner or already present. tags may use fit, material, pattern, style, "
+        "formality, season, features, care_preferences, pairing_preferences. Keep notes as a concise durable "
+        "reminder of personal preferences (not a chat transcript). Use null or [] when nothing should change."
+    )
+    try:
+        raw = await AIService().generate_text(
+            prompt,
+            system_prompt="You maintain a personal wardrobe. Never invent garment facts. Return valid JSON only.",
+        )
+    except AIDisabledError as exc:
+        raise HTTPException(status_code=503, detail="Item assistant is unavailable because text AI is disabled") from exc
+    except Exception as exc:
+        logger.exception("Item assistant failed for %s", item_id)
+        raise HTTPException(status_code=502, detail="Item assistant could not process that yet. Try again.") from exc
+
+    data = _assistant_json(str(raw))
+    if not data:
+        raise HTTPException(status_code=502, detail="Item assistant returned an unreadable response. Try again.")
+
+    updated: list[str] = []
+    for field, max_len in (("name", 100), ("brand", 100), ("type", 50), ("subtype", 50), ("primary_color", 50)):
+        value = data.get(field)
+        if isinstance(value, str) and value.strip():
+            value = value.strip()[:max_len]
+            if getattr(item, field) != value:
+                setattr(item, field, value)
+                updated.append(field)
+    colors = data.get("colors")
+    if isinstance(colors, list):
+        clean_colors = [str(color).strip().lower() for color in colors if str(color).strip()][:20]
+        if clean_colors and item.colors != clean_colors:
+            item.colors = clean_colors
+            updated.append("colors")
+    tags = data.get("tags")
+    if isinstance(tags, dict):
+        clean_tags = {k: v for k, v in tags.items() if k in {
+            "fit", "material", "pattern", "style", "formality", "season", "features",
+            "care_preferences", "pairing_preferences", "occasion",
+        } and v not in (None, "", [], {})}
+        if clean_tags:
+            item.tags = {**(item.tags or {}), **clean_tags}
+            updated.append("tags")
+    notes = _merge_note(item.notes, data.get("notes") or request.message)
+    if notes != item.notes:
+        item.notes = notes
+        updated.append("notes")
+    if updated:
+        item.tagging_status = TaggingStatus.tagged
+        item.tagged_by = TaggedBy.manual
+        item.tagged_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(item)
+    summary = data.get("summary") if isinstance(data.get("summary"), str) else "Saved the details you shared."
+    return ItemAssistantResponse(item=ItemResponse.model_validate(item), summary=summary[:300], updated_fields=updated)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

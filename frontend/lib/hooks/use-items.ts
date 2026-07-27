@@ -169,6 +169,26 @@ export function useUpdateItem() {
   });
 }
 
+export function useItemAssistant() {
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
+
+  return useMutation({
+    mutationFn: async ({ id, message }: { id: string; message: string }) => {
+      if (session?.accessToken) setAccessToken(session.accessToken as string);
+      return api.post<{ item: Item; summary: string; updated_fields: string[] }>(
+        `/items/${id}/assistant`, { message }
+      );
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData<Item>(['item', variables.id], result.item);
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['item', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['outfits'] });
+    },
+  });
+}
+
 export function useRemoveBackground() {
   const queryClient = useQueryClient();
   const { data: session } = useSession();

@@ -71,6 +71,12 @@ class ItemUpdate(BaseModel):
     wash_interval: int | None = None
 
 
+class ItemAssistantRequest(BaseModel):
+    """Natural-language details a person wants remembered about an item."""
+
+    message: str = Field(min_length=2, max_length=2000)
+
+
 class ItemResponse(ItemBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +142,12 @@ class ItemResponse(ItemBase):
         if self.wash_interval is not None:
             return self.wash_interval
         return DEFAULT_WASH_INTERVALS.get(self.type, 3)
+
+
+class ItemAssistantResponse(BaseModel):
+    item: ItemResponse
+    summary: str
+    updated_fields: list[str] = Field(default_factory=list)
 
 
 class ItemListResponse(BaseModel):
