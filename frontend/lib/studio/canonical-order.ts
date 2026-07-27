@@ -29,6 +29,7 @@ export const ITEM_ROLE: Record<string, string> = {
   belt: 'accessory',
   bag: 'accessory',
   accessories: 'accessory',
+  cologne: 'accessory',
 };
 
 export const CANONICAL_ROLE_ORDER = [

@@ -75,6 +75,7 @@ VALID_TYPES = {
     "belt",
     "bag",
     "accessories",
+    "cologne",
     "top",
     "jumpsuit",
     "socks",

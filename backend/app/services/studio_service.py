@@ -103,7 +103,11 @@ class StudioService:
                         worn_at,
                     ),
                     wears_since_wash=new_wears_since_wash,
-                    needs_wash=new_wears_since_wash >= effective_interval,
+                    needs_wash=(
+                        new_wears_since_wash >= effective_interval
+                        if effective_interval is not None
+                        else False
+                    ),
                 )
             )
             self.db.expire(item)

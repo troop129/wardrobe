@@ -6,8 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.utils.signed_urls import sign_image_url
 
-# Default wash intervals by clothing type (wears between washes)
-DEFAULT_WASH_INTERVALS: dict[str, int] = {
+# Default wash intervals by clothing type (wears between washes). A value of
+# None means the item is not wash-tracked by Wardrowbe.
+DEFAULT_WASH_INTERVALS: dict[str, int | None] = {
     "t-shirt": 1,
     "shirt": 2,
     "blouse": 2,
@@ -22,8 +23,17 @@ DEFAULT_WASH_INTERVALS: dict[str, int] = {
     "coat": 10,
     "blazer": 5,
     "suit": 5,
-    "shoes": 15,
-    "accessories": 20,
+    "shoes": None,
+    "sneakers": None,
+    "boots": None,
+    "sandals": None,
+    "tie": None,
+    "hat": None,
+    "scarf": None,
+    "belt": None,
+    "bag": None,
+    "accessories": None,
+    "cologne": None,
     "other": 3,
 }
 
@@ -138,7 +148,7 @@ class ItemResponse(ItemBase):
 
     @computed_field
     @property
-    def effective_wash_interval(self) -> int:
+    def effective_wash_interval(self) -> int | None:
         if self.wash_interval is not None:
             return self.wash_interval
         return DEFAULT_WASH_INTERVALS.get(self.type, 3)

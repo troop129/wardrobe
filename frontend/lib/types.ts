@@ -53,7 +53,7 @@ export interface Item {
   last_washed_at?: string;
   wash_interval?: number;
   needs_wash: boolean;
-  effective_wash_interval: number;
+  effective_wash_interval: number | null;
   additional_images: ItemImage[];
   is_archived: boolean;
   archived_at?: string;
@@ -154,6 +154,7 @@ export const CLOTHING_TYPES = [
   { label: 'Boots', value: 'boots' },
   { label: 'Cardigan', value: 'cardigan' },
   { label: 'Coat', value: 'coat' },
+  { label: 'Cologne', value: 'cologne' },
   { label: 'Dress', value: 'dress' },
   { label: 'Hat', value: 'hat' },
   { label: 'Hoodie', value: 'hoodie' },

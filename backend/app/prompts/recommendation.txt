@@ -48,7 +48,7 @@ RULES:
 - Pick exactly ONE top (shirt/blouse/sweater/t-shirt) + ONE bottom (pants/jeans/skirt/shorts) + ONE shoes
 - OR pick ONE dress + ONE shoes
 - OPTIONAL: ONE bag if appropriate for the occasion
-- OPTIONAL: accessories (belt, scarf, hat, jewelry) that genuinely complement the outfit
+- OPTIONAL: accessories (belt, scarf, hat, jewelry) or one cologne that genuinely complements the outfit
 - For cold or rainy weather, add outerwear (jacket/coat) if available
 - Every piece must earn its place — do not add items just to fill slots
 - Do NOT pick the same item number twice

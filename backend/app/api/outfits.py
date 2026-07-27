@@ -808,7 +808,11 @@ async def submit_feedback(
                     wear_count=ClothingItem.wear_count + 1,
                     last_worn_at=user_today,
                     wears_since_wash=ClothingItem.wears_since_wash + 1,
-                    needs_wash=ClothingItem.wears_since_wash + 1 >= effective_interval,
+                    needs_wash=(
+                        ClothingItem.wears_since_wash + 1 >= effective_interval
+                        if effective_interval is not None
+                        else False
+                    ),
                 )
             )
     if request.worn_with_modifications is not None:

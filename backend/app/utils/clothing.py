@@ -34,6 +34,7 @@ ITEM_ROLE: dict[str, str] = {
     "belt": "accessory",
     "bag": "accessory",
     "accessories": "accessory",
+    "cologne": "accessory",
 }
 
 

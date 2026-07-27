@@ -749,10 +749,16 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       max={100}
                       value={editForm.wash_interval ?? ''}
                       onChange={(e) => setEditForm({ ...editForm, wash_interval: e.target.value ? parseInt(e.target.value) : undefined })}
-                      placeholder={`Default: ${item.effective_wash_interval}`}
+                      placeholder={
+                        item.effective_wash_interval === null
+                          ? 'Not wash-tracked'
+                          : `Default: ${item.effective_wash_interval}`
+                      }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Number of wears before this item needs washing. Leave blank for default.
+                      {item.effective_wash_interval === null
+                        ? 'This item is not wash-tracked by default. Enter a number to override.'
+                        : 'Number of wears before this item needs washing. Leave blank for default.'}
                     </p>
                   </div>
                   <div className="flex gap-2 pt-2">
@@ -819,6 +825,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                   </div>
 
                   {/* Wash Status */}
+                  {item.effective_wash_interval !== null && (
                   <div className="space-y-2 pt-2 border-t">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm font-medium">
@@ -877,6 +884,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       </Collapsible>
                     )}
                   </div>
+                  )}
 
                   {/* Wear History */}
                   {item.wear_count > 0 && wearStats && (

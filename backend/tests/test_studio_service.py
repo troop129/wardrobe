@@ -101,8 +101,10 @@ async def test_create_from_scratch_mark_worn(db_session, studio_user, wardrobe_i
     assert outfit.status == OutfitStatus.accepted
 
     await db_session.refresh(shirt)
+    await db_session.refresh(sneakers)
     assert shirt.wear_count == 1
     assert shirt.wears_since_wash == 1
+    assert sneakers.needs_wash is False
 
 
 @pytest.mark.asyncio
