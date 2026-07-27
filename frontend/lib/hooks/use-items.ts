@@ -60,6 +60,12 @@ export function useItem(itemId: string) {
     queryKey: ['item', itemId],
     queryFn: () => api.get<Item>(`/items/${itemId}`),
     enabled: !!itemId && status !== 'loading',
+    // Refresh an open processing item so the detail overlay clears as soon as
+    // its worker job completes, without requiring a full-page refresh.
+    refetchInterval: (query) => {
+      const item = query.state.data as Item | undefined;
+      return item?.status === 'processing' ? 4000 : false;
+    },
   });
 }
 

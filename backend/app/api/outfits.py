@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,7 +21,6 @@ from app.models.outfit import (
     UserFeedback,
 )
 from app.models.user import User
-from app.schemas.item import DEFAULT_WASH_INTERVALS
 from app.services.ai_service import AIDisabledError
 from app.services.item_service import ItemService
 from app.services.learning_service import LearningService
@@ -585,20 +584,15 @@ async def bulk_delete_outfits(
     else:
         outfit_ids = request.outfit_ids or []
 
+    studio = StudioService(db)
     for outfit_id in outfit_ids:
         try:
-            result = await db.execute(
-                select(Outfit).where(
-                    and_(Outfit.id == outfit_id, Outfit.user_id == current_user.id)
-                )
-            )
-            outfit = result.scalar_one_or_none()
-            if not outfit:
+            deleted_ok = await studio.delete_outfit(current_user, outfit_id)
+            if not deleted_ok:
                 errors.append(f"Outfit {outfit_id} not found or not owned by user")
                 failed += 1
                 continue
 
-            await db.delete(outfit)
             deleted += 1
         except Exception as e:
             logger.error(f"Failed to delete outfit {outfit_id}: {e}")
@@ -732,18 +726,15 @@ async def delete_outfit(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    query = select(Outfit).where(and_(Outfit.id == outfit_id, Outfit.user_id == current_user.id))
+    studio = StudioService(db)
+    deleted = await studio.delete_outfit(current_user, outfit_id)
 
-    result = await db.execute(query)
-    outfit = result.scalar_one_or_none()
-
-    if not outfit:
+    if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "Outfit not found", "error_code": "OUTFIT_NOT_FOUND"},
         )
 
-    await db.delete(outfit)
     await db.commit()
 
 
@@ -794,27 +785,14 @@ async def submit_feedback(
     if request.worn and not feedback.worn_at:
         user_today = get_user_today(current_user)
         feedback.worn_at = user_today
-        for outfit_item in outfit.items:
-            item = outfit_item.item
-            effective_interval = (
-                item.wash_interval
-                if item.wash_interval is not None
-                else DEFAULT_WASH_INTERVALS.get(item.type, 3)
-            )
-            await db.execute(
-                update(ClothingItem)
-                .where(ClothingItem.id == item.id)
-                .values(
-                    wear_count=ClothingItem.wear_count + 1,
-                    last_worn_at=user_today,
-                    wears_since_wash=ClothingItem.wears_since_wash + 1,
-                    needs_wash=(
-                        ClothingItem.wears_since_wash + 1 >= effective_interval
-                        if effective_interval is not None
-                        else False
-                    ),
-                )
-            )
+        studio_service = StudioService(db)
+        await studio_service._apply_wear_tracking(
+            current_user.id,
+            [outfit_item.item_id for outfit_item in outfit.items],
+            user_today,
+            outfit_id=outfit.id,
+            occasion=outfit.occasion,
+        )
     if request.worn_with_modifications is not None:
         feedback.worn_with_modifications = request.worn_with_modifications
     if request.modification_notes is not None:

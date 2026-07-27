@@ -30,6 +30,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { useUpdatePreferences } from '@/lib/hooks/use-preferences';
 import { useCreateItem } from '@/lib/hooks/use-items';
+import { useCreateFamily, useJoinFamily } from '@/lib/hooks/use-family';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { api, setAccessToken } from '@/lib/api';
 import { CLOTHING_COLORS, CLOTHING_TYPES, StyleProfile } from '@/lib/types';

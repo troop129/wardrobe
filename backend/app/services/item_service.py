@@ -297,9 +297,7 @@ class ItemService:
             else DEFAULT_WASH_INTERVALS.get(item.type, 3)
         )
         item.needs_wash = (
-            item.wears_since_wash >= effective_interval
-            if effective_interval is not None
-            else False
+            item.wears_since_wash >= effective_interval if effective_interval is not None else False
         )
 
         await self.db.flush()

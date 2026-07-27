@@ -191,8 +191,10 @@ def _response_rejects_temperature(response: httpx.Response) -> bool:
     temperature of 1 and reject any other value. Detected from the error body so
     the same code path works for any provider that surfaces the same constraint."""
     text = response.text.lower()
-    return response.status_code == 400 and "temperature" in text and (
-        "unsupported" in text or "only the default" in text
+    return (
+        response.status_code == 400
+        and "temperature" in text
+        and ("unsupported" in text or "only the default" in text)
     )
 
 

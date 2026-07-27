@@ -7,13 +7,14 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.item import ClothingItem, ItemStatus
+from app.models.item import ClothingItem, ItemHistory, ItemStatus
 from app.models.outfit import (
     FamilyOutfitRating,
     Outfit,
     OutfitItem,
     OutfitSource,
     OutfitStatus,
+    UserFeedback,
 )
 from app.models.user import User
 from app.schemas.item import DEFAULT_WASH_INTERVALS
@@ -68,7 +69,13 @@ class StudioService:
         return [by_id[iid] for iid in ordered_ids]
 
     async def _apply_wear_tracking(
-        self, user_id: UUID, item_ids: list[UUID], worn_at: date
+        self,
+        user_id: UUID,
+        item_ids: list[UUID],
+        worn_at: date,
+        *,
+        outfit_id: UUID,
+        occasion: str | None = None,
     ) -> None:
         for iid in item_ids:
             existing = await self.db.get(ClothingItem, iid)
@@ -93,6 +100,15 @@ class StudioService:
             )
             new_wears_since_wash = (item.wears_since_wash or 0) + 1
 
+            self.db.add(
+                ItemHistory(
+                    item_id=item.id,
+                    outfit_id=outfit_id,
+                    worn_at=worn_at,
+                    occasion=occasion,
+                )
+            )
+
             await self.db.execute(
                 update(ClothingItem)
                 .where(ClothingItem.id == item.id)
@@ -111,6 +127,107 @@ class StudioService:
                 )
             )
             self.db.expire(item)
+
+    async def _recompute_last_worn_at(
+        self, item_id: UUID, excluding_outfit_id: UUID
+    ) -> date | None:
+        history_result = await self.db.execute(
+            select(func.max(ItemHistory.worn_at)).where(ItemHistory.item_id == item_id)
+        )
+        max_history = history_result.scalar_one_or_none()
+
+        outfit_result = await self.db.execute(
+            select(func.max(UserFeedback.worn_at))
+            .select_from(UserFeedback)
+            .join(Outfit, Outfit.id == UserFeedback.outfit_id)
+            .join(OutfitItem, OutfitItem.outfit_id == Outfit.id)
+            .where(
+                and_(
+                    OutfitItem.item_id == item_id,
+                    Outfit.id != excluding_outfit_id,
+                    UserFeedback.worn_at.is_not(None),
+                )
+            )
+        )
+        max_outfit = outfit_result.scalar_one_or_none()
+
+        candidates = [d for d in (max_history, max_outfit) if d is not None]
+        return max(candidates) if candidates else None
+
+    async def _reverse_wear_tracking(
+        self,
+        user_id: UUID,
+        item_ids: list[UUID],
+        outfit_id: UUID,
+    ) -> None:
+        if not item_ids:
+            return
+
+        await self.db.execute(sa_delete(ItemHistory).where(ItemHistory.outfit_id == outfit_id))
+
+        for iid in item_ids:
+            existing = await self.db.get(ClothingItem, iid)
+            if existing is not None:
+                self.db.expire(existing)
+
+        result = await self.db.execute(
+            select(ClothingItem).where(
+                and_(
+                    ClothingItem.id.in_(item_ids),
+                    ClothingItem.user_id == user_id,
+                )
+            )
+        )
+        items = list(result.scalars().all())
+
+        for item in items:
+            effective_interval = (
+                item.wash_interval
+                if item.wash_interval is not None
+                else DEFAULT_WASH_INTERVALS.get(item.type, 3)
+            )
+            new_wears_since_wash = max(0, (item.wears_since_wash or 0) - 1)
+            new_wear_count = max(0, (item.wear_count or 0) - 1)
+            new_last_worn = await self._recompute_last_worn_at(item.id, outfit_id)
+
+            await self.db.execute(
+                update(ClothingItem)
+                .where(ClothingItem.id == item.id)
+                .values(
+                    wear_count=new_wear_count,
+                    last_worn_at=new_last_worn,
+                    wears_since_wash=new_wears_since_wash,
+                    needs_wash=(
+                        new_wears_since_wash >= effective_interval
+                        if effective_interval is not None
+                        else False
+                    ),
+                )
+            )
+            self.db.expire(item)
+
+    async def delete_outfit(self, user: User, outfit_id: UUID) -> bool:
+        result = await self.db.execute(
+            select(Outfit)
+            .where(and_(Outfit.id == outfit_id, Outfit.user_id == user.id))
+            .options(
+                selectinload(Outfit.items),
+                selectinload(Outfit.feedback),
+            )
+        )
+        outfit = result.scalar_one_or_none()
+        if outfit is None:
+            return False
+
+        if outfit.feedback is not None and outfit.feedback.worn_at is not None:
+            await self._reverse_wear_tracking(
+                user.id,
+                [oi.item_id for oi in outfit.items],
+                outfit.id,
+            )
+
+        await self.db.delete(outfit)
+        return True
 
     async def _reload_outfit(self, outfit_id: UUID) -> Outfit:
         result = await self.db.execute(
@@ -173,7 +290,13 @@ class StudioService:
         self.db.add(feedback)
 
         if mark_worn and effective_worn is not None:
-            await self._apply_wear_tracking(user.id, [i.id for i in ordered], effective_worn)
+            await self._apply_wear_tracking(
+                user.id,
+                [i.id for i in ordered],
+                effective_worn,
+                outfit_id=outfit.id,
+                occasion=occasion,
+            )
 
         await self.db.flush()
         return await self._reload_outfit(outfit.id)
@@ -243,7 +366,13 @@ class StudioService:
         original.responded_at = datetime.utcnow()
 
         if effective_date is not None:
-            await self._apply_wear_tracking(user.id, [i.id for i in ordered], effective_date)
+            await self._apply_wear_tracking(
+                user.id,
+                [i.id for i in ordered],
+                effective_date,
+                outfit_id=replacement.id,
+                occasion=original.occasion,
+            )
 
         await self.db.flush()
         return await self._reload_outfit(replacement.id)
@@ -357,7 +486,13 @@ class StudioService:
         )
         self.db.add(feedback)
 
-        await self._apply_wear_tracking(user.id, [oi.item_id for oi in template.items], target_date)
+        await self._apply_wear_tracking(
+            user.id,
+            [oi.item_id for oi in template.items],
+            target_date,
+            outfit_id=wear.id,
+            occasion=template.occasion,
+        )
 
         await self.db.flush()
         return await self._reload_outfit(wear.id)

@@ -120,12 +120,7 @@ def _largest_component_mask_numpy(binary: "object") -> "object | None":
                 pixels.append((cy, cx))
                 for dy, dx in neighbors:
                     ny, nx = cy + dy, cx + dx
-                    if (
-                        0 <= ny < h
-                        and 0 <= nx < w
-                        and foreground[ny, nx]
-                        and not visited[ny, nx]
-                    ):
+                    if 0 <= ny < h and 0 <= nx < w and foreground[ny, nx] and not visited[ny, nx]:
                         visited[ny, nx] = True
                         stack.append((ny, nx))
             components.append((len(pixels), pixels))
@@ -163,9 +158,7 @@ def _refine_cutout_pillow(image: Image.Image) -> Image.Image:
     width, height = image.size
     pixels = list(image.getdata())
 
-    alpha_floor_cleared = [
-        (r, g, b, 0 if a < _ALPHA_FLOOR else a) for (r, g, b, a) in pixels
-    ]
+    alpha_floor_cleared = [(r, g, b, 0 if a < _ALPHA_FLOOR else a) for (r, g, b, a) in pixels]
 
     foreground = [a >= _ALPHA_SOLID for (_, _, _, a) in alpha_floor_cleared]
     visited = [False] * (width * height)
@@ -213,8 +206,7 @@ def _refine_cutout_pillow(image: Image.Image) -> Image.Image:
             else:
                 break
         cleaned = [
-            (r, g, b, a if i in keep else 0)
-            for i, (r, g, b, a) in enumerate(alpha_floor_cleared)
+            (r, g, b, a if i in keep else 0) for i, (r, g, b, a) in enumerate(alpha_floor_cleared)
         ]
     else:
         cleaned = alpha_floor_cleared

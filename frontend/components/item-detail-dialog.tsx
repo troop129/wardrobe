@@ -313,6 +313,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const handleReplaceImage = async (file: File) => {
+    if (!item) return;
     try {
       await replaceImage.mutateAsync({ itemId: item.id, file });
       setImageKey((k) => k + 1);

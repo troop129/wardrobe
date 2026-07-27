@@ -332,7 +332,9 @@ class ImageService:
         # original with an already-processed image
         if not backup_full.exists():
             if image_path.lower().endswith((".png", ".webp")):
-                Image.open(original_full).convert("RGB").save(backup_full, format="JPEG", quality=95)
+                Image.open(original_full).convert("RGB").save(
+                    backup_full, format="JPEG", quality=95
+                )
             else:
                 shutil.copy2(original_full, backup_full)
 

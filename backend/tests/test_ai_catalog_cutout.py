@@ -87,9 +87,7 @@ class TestHealthFeaturesAiCatalog:
 
 class TestAiCatalogCutoutEndpoint:
     @pytest.mark.asyncio
-    async def test_not_configured_returns_501(
-        self, client: AsyncClient, auth_headers, monkeypatch
-    ):
+    async def test_not_configured_returns_501(self, client: AsyncClient, auth_headers, monkeypatch):
         monkeypatch.setattr(
             "app.services.ai_catalog_cutout.is_available",
             lambda: False,

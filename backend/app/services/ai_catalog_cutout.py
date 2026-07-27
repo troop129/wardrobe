@@ -101,9 +101,7 @@ def chroma_key_to_rgba(
     dist = np.sqrt(np.sum((arr - key) ** 2, axis=2))
 
     if soft_matte:
-        alpha = (dist - _KEY_DIST_TRANSPARENT) / max(
-            _KEY_DIST_OPAQUE - _KEY_DIST_TRANSPARENT, 1
-        )
+        alpha = (dist - _KEY_DIST_TRANSPARENT) / max(_KEY_DIST_OPAQUE - _KEY_DIST_TRANSPARENT, 1)
         alpha = np.clip(alpha, 0.0, 1.0)
     else:
         alpha = (dist >= _KEY_DIST_OPAQUE).astype(np.float32)
@@ -115,9 +113,7 @@ def chroma_key_to_rgba(
         if key_rgb == GREEN_KEY:
             other = np.maximum(out[:, :, 0], out[:, :, 2])
             spill = np.maximum(out[:, :, 1] - other, 0.0)
-            out[:, :, 1] = np.where(
-                fringe, out[:, :, 1] - spill * _DESPILL_STRENGTH, out[:, :, 1]
-            )
+            out[:, :, 1] = np.where(fringe, out[:, :, 1] - spill * _DESPILL_STRENGTH, out[:, :, 1])
         elif key_rgb == MAGENTA_KEY:
             # Magenta = high R+B, low G — pull R/B toward G on fringes.
             spill_r = np.maximum(out[:, :, 0] - out[:, :, 1], 0.0)
@@ -138,15 +134,18 @@ def chroma_key_to_rgba(
         ]
     )
     result = Image.fromarray(rgba, "RGBA")
-    # Light feather so hard thresholds don't look jagged on thumbnails.
+    # Feather only the soft matte. A caller requesting a hard matte expects
+    # fully opaque product pixels to remain fully opaque.
+    if not soft_matte:
+        return result
+
+    # Light feather so soft edges don't look jagged on thumbnails.
     r, g, b, a = result.split()
     a = a.filter(ImageFilter.GaussianBlur(radius=0.5))
     return Image.merge("RGBA", (r, g, b, a))
 
 
-def _chroma_key_pillow(
-    image: Image.Image, key_rgb: tuple[int, int, int]
-) -> Image.Image:
+def _chroma_key_pillow(image: Image.Image, key_rgb: tuple[int, int, int]) -> Image.Image:
     """Fallback matte without numpy."""
     pixels = list(image.getdata())
     keyed: list[tuple[int, int, int, int]] = []
@@ -181,8 +180,13 @@ def edit_to_chroma_catalog(source_path: Path) -> Image.Image:
     prompt = build_catalog_prompt(key_rgb)
 
     try:
-        from openai import OpenAI
-        from openai import APIError, BadRequestError, AuthenticationError, PermissionDeniedError
+        from openai import (
+            APIError,
+            AuthenticationError,
+            BadRequestError,
+            OpenAI,
+            PermissionDeniedError,
+        )
     except ImportError as e:
         raise AICatalogCutoutError(
             "openai package is not installed. Add openai to backend requirements.",

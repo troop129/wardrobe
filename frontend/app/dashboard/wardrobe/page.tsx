@@ -171,10 +171,11 @@ export default function WardrobePage() {
   const items = data?.items || [];
   const total = data?.total || 0;
 
-  // Get selected item: try from list first, then fetch individually (for deep-link from outfit pages)
+  // Always fetch the open item. The list can hold a stale processing snapshot
+  // after an AI job completed, which would otherwise leave its overlay stuck.
   const listItem = detailItemId ? items.find((i) => i.id === detailItemId) || null : null;
-  const { data: fetchedItem } = useItem(detailItemId && !listItem ? detailItemId : '');
-  const detailItem = listItem || fetchedItem || null;
+  const { data: fetchedItem } = useItem(detailItemId ?? '');
+  const detailItem = fetchedItem || listItem || null;
 
   // Count items being processed or with errors
   const processingCount = items.filter((i) => i.status === 'processing').length;

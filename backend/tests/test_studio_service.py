@@ -108,6 +108,106 @@ async def test_create_from_scratch_mark_worn(db_session, studio_user, wardrobe_i
 
 
 @pytest.mark.asyncio
+async def test_delete_worn_outfit_reverses_wear_history(db_session, studio_user, wardrobe_items):
+    from sqlalchemy import select
+
+    from app.models.item import ItemHistory
+
+    service = StudioService(db_session)
+    shirt, jeans, sneakers = wardrobe_items[0], wardrobe_items[1], wardrobe_items[2]
+    today = date.today()
+
+    outfit = await service.create_from_scratch(
+        user=studio_user,
+        item_ids=[shirt.id, jeans.id, sneakers.id],
+        occasion="casual",
+        name=None,
+        scheduled_for=today,
+        mark_worn=True,
+        source_item_id=None,
+    )
+    await db_session.commit()
+
+    await db_session.refresh(shirt)
+    assert shirt.wear_count == 1
+    assert shirt.last_worn_at == today
+
+    history = await db_session.execute(
+        select(ItemHistory).where(ItemHistory.outfit_id == outfit.id)
+    )
+    assert len(list(history.scalars().all())) == 3
+
+    deleted = await service.delete_outfit(studio_user, outfit.id)
+    await db_session.commit()
+    assert deleted is True
+
+    await db_session.refresh(shirt)
+    await db_session.refresh(jeans)
+    await db_session.refresh(sneakers)
+    assert shirt.wear_count == 0
+    assert shirt.last_worn_at is None
+    assert shirt.wears_since_wash == 0
+    assert jeans.wear_count == 0
+    assert sneakers.wear_count == 0
+
+    remaining_history = await db_session.execute(
+        select(ItemHistory).where(ItemHistory.item_id == shirt.id)
+    )
+    assert list(remaining_history.scalars().all()) == []
+
+
+@pytest.mark.asyncio
+async def test_delete_worn_outfit_preserves_other_wear_dates(
+    db_session, studio_user, wardrobe_items
+):
+    service = StudioService(db_session)
+    shirt, jeans, sneakers = wardrobe_items[0], wardrobe_items[1], wardrobe_items[2]
+    earlier = date(2026, 7, 1)
+    later = date(2026, 7, 20)
+
+    first = await service.create_from_scratch(
+        user=studio_user,
+        item_ids=[shirt.id, jeans.id, sneakers.id],
+        occasion="casual",
+        name=None,
+        scheduled_for=earlier,
+        mark_worn=True,
+        source_item_id=None,
+    )
+    second = await service.create_from_scratch(
+        user=studio_user,
+        item_ids=[shirt.id, jeans.id, sneakers.id],
+        occasion="casual",
+        name=None,
+        scheduled_for=later,
+        mark_worn=True,
+        source_item_id=None,
+    )
+    await db_session.commit()
+
+    await db_session.refresh(shirt)
+    assert shirt.wear_count == 2
+    assert shirt.last_worn_at == later
+
+    deleted = await service.delete_outfit(studio_user, second.id)
+    await db_session.commit()
+    assert deleted is True
+
+    await db_session.refresh(shirt)
+    assert shirt.wear_count == 1
+    assert shirt.last_worn_at == earlier
+
+    # Keep the earlier outfit; deleting it should clear wear entirely
+    deleted_first = await service.delete_outfit(studio_user, first.id)
+    await db_session.commit()
+    assert deleted_first is True
+
+    await db_session.refresh(shirt)
+    assert shirt.wear_count == 0
+    assert shirt.last_worn_at is None
+
+
+@pytest.mark.asyncio
 async def test_create_from_scratch_rejects_non_owned_items(db_session, studio_user):
     service = StudioService(db_session)
     fake_id = uuid4()

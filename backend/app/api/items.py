@@ -27,9 +27,9 @@ from app.schemas.item import (
     BulkDeleteResponse,
     BulkUploadResponse,
     BulkUploadResult,
-    ItemCreate,
     ItemAssistantRequest,
     ItemAssistantResponse,
+    ItemCreate,
     ItemFilter,
     ItemImageResponse,
     ItemListResponse,
@@ -42,9 +42,9 @@ from app.schemas.item import (
     WashHistoryResponse,
 )
 from app.services import background_removal
+from app.services.ai_service import AIDisabledError, AIService
 from app.services.image_service import ImageService
 from app.services.item_service import ItemService
-from app.services.ai_service import AIDisabledError, AIService
 from app.utils.auth import get_current_user
 from app.workers.settings import get_redis_settings
 
@@ -744,9 +744,14 @@ async def apply_item_assistant(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
 
     snapshot = {
-        "type": item.type, "subtype": item.subtype, "name": item.name,
-        "brand": item.brand, "colors": item.colors, "primary_color": item.primary_color,
-        "tags": item.tags or {}, "notes": item.notes,
+        "type": item.type,
+        "subtype": item.subtype,
+        "name": item.name,
+        "brand": item.brand,
+        "colors": item.colors,
+        "primary_color": item.primary_color,
+        "tags": item.tags or {},
+        "notes": item.notes,
     }
     prompt = (
         "Current item: " + json.dumps(snapshot) + "\n\n"
@@ -764,17 +769,29 @@ async def apply_item_assistant(
             system_prompt="You maintain a personal wardrobe. Never invent garment facts. Return valid JSON only.",
         )
     except AIDisabledError as exc:
-        raise HTTPException(status_code=503, detail="Item assistant is unavailable because text AI is disabled") from exc
+        raise HTTPException(
+            status_code=503, detail="Item assistant is unavailable because text AI is disabled"
+        ) from exc
     except Exception as exc:
         logger.exception("Item assistant failed for %s", item_id)
-        raise HTTPException(status_code=502, detail="Item assistant could not process that yet. Try again.") from exc
+        raise HTTPException(
+            status_code=502, detail="Item assistant could not process that yet. Try again."
+        ) from exc
 
     data = _assistant_json(str(raw))
     if not data:
-        raise HTTPException(status_code=502, detail="Item assistant returned an unreadable response. Try again.")
+        raise HTTPException(
+            status_code=502, detail="Item assistant returned an unreadable response. Try again."
+        )
 
     updated: list[str] = []
-    for field, max_len in (("name", 100), ("brand", 100), ("type", 50), ("subtype", 50), ("primary_color", 50)):
+    for field, max_len in (
+        ("name", 100),
+        ("brand", 100),
+        ("type", 50),
+        ("subtype", 50),
+        ("primary_color", 50),
+    ):
         value = data.get(field)
         if isinstance(value, str) and value.strip():
             value = value.strip()[:max_len]
@@ -789,10 +806,24 @@ async def apply_item_assistant(
             updated.append("colors")
     tags = data.get("tags")
     if isinstance(tags, dict):
-        clean_tags = {k: v for k, v in tags.items() if k in {
-            "fit", "material", "pattern", "style", "formality", "season", "features",
-            "care_preferences", "pairing_preferences", "occasion",
-        } and v not in (None, "", [], {})}
+        clean_tags = {
+            k: v
+            for k, v in tags.items()
+            if k
+            in {
+                "fit",
+                "material",
+                "pattern",
+                "style",
+                "formality",
+                "season",
+                "features",
+                "care_preferences",
+                "pairing_preferences",
+                "occasion",
+            }
+            and v not in (None, "", [], {})
+        }
         if clean_tags:
             item.tags = {**(item.tags or {}), **clean_tags}
             updated.append("tags")
@@ -811,8 +842,14 @@ async def apply_item_assistant(
         item.tagged_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(item)
-    summary = data.get("summary") if isinstance(data.get("summary"), str) else "Saved the details you shared."
-    return ItemAssistantResponse(item=ItemResponse.model_validate(item), summary=summary[:300], updated_fields=updated)
+    summary = (
+        data.get("summary")
+        if isinstance(data.get("summary"), str)
+        else "Saved the details you shared."
+    )
+    return ItemAssistantResponse(
+        item=ItemResponse.model_validate(item), summary=summary[:300], updated_fields=updated
+    )
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

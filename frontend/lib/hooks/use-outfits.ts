@@ -213,6 +213,9 @@ export function useDeleteOutfit() {
       queryClient.invalidateQueries({ queryKey: ['calendarOutfits'] });
       queryClient.invalidateQueries({ queryKey: ['pendingOutfits'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['wear-history'] });
+      queryClient.invalidateQueries({ queryKey: ['wear-stats'] });
     },
   });
 }
@@ -284,6 +287,9 @@ export function useBulkDeleteOutfits() {
       queryClient.invalidateQueries({ queryKey: ['calendarOutfits'] });
       queryClient.invalidateQueries({ queryKey: ['pendingOutfits'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['wear-history'] });
+      queryClient.invalidateQueries({ queryKey: ['wear-stats'] });
     },
   });
 }
