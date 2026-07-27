@@ -19,68 +19,19 @@ function OIDCLoginButton({ callbackUrl }: { callbackUrl: string }) {
   );
 }
 
-function LocalLogin({ callbackUrl }: { callbackUrl: string }) {
-  const [email, setEmail] = useState('you@wardrowbe.local');
-  const [name, setName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+function PersonalWardrobe({ callbackUrl }: { callbackUrl: string }) {
+  const [error, setError] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    await signIn('dev-credentials', {
-      email,
-      name,
-      callbackUrl,
-    });
-  };
+  useEffect(() => {
+    signIn('dev-credentials', { callbackUrl }).catch(() => setError(true));
+  }, [callbackUrl]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">
-        Private home-network sign-in — choose the name and email you want to use here.
-      </div>
-      <div className="space-y-2">
-        <label htmlFor="email" className="block text-sm font-medium">
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          placeholder="you@wardrowbe.local"
-        />
-      </div>
-      <div className="space-y-2">
-        <label htmlFor="name" className="block text-sm font-medium">
-          Display Name
-        </label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          placeholder="Your Name"
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Signing in...
-          </>
-        ) : (
-          'Sign in'
-        )}
-      </button>
-    </form>
+    <div className="rounded-md border bg-muted/40 p-5 text-center">
+      <Loader2 className="mx-auto h-5 w-5 animate-spin text-primary" />
+      <p className="mt-3 text-sm font-medium">Opening your wardrobe…</p>
+      {error && <p className="mt-1 text-sm text-destructive">Couldn&apos;t open your wardrobe. Refresh and try again.</p>}
+    </div>
   );
 }
 
@@ -167,7 +118,7 @@ function LoginContent() {
 
       <div className="space-y-4">
         {authMode === 'oidc' && <OIDCLoginButton callbackUrl={callbackUrl} />}
-        {authMode === 'dev' && <LocalLogin callbackUrl={callbackUrl} />}
+        {authMode === 'dev' && <PersonalWardrobe callbackUrl={callbackUrl} />}
         {authMode === 'unconfigured' && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm space-y-2">
             <p className="font-medium text-destructive">No authentication method configured</p>
@@ -201,9 +152,6 @@ export default function LoginPage() {
           <LoginContent />
         </Suspense>
 
-        <p className="text-center text-sm text-muted-foreground">
-          By signing in, you agree to our terms of service and privacy policy.
-        </p>
       </div>
     </main>
   );

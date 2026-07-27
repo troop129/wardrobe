@@ -56,22 +56,18 @@ const OIDCProvider: OAuthConfig<OIDCProfile> = {
   },
 };
 
-// Password-free sign-in for a trusted, private LAN deployment.
+// Password-free shared session for a trusted, private LAN deployment. Every
+// device receives the same account, so the wardrobe stays in sync everywhere.
 const DevCredentialsProvider = CredentialsProvider({
   id: 'dev-credentials',
-  name: 'Local Sign-in',
-  credentials: {
-    email: { label: 'Email', type: 'email', placeholder: 'you@wardrowbe.local' },
-    name: { label: 'Name', type: 'text', placeholder: 'Your name' },
-  },
+  name: 'Personal Wardrobe',
+  credentials: {},
   async authorize(credentials) {
-    if (!credentials?.email) {
-      return null;
-    }
-
     // This provider is intentionally only enabled by an explicit environment flag.
-    const email = credentials.email;
-    const name = credentials.name || email.split('@')[0];
+    // Do not take identity from the browser: every LAN device enters this same
+    // personal wardrobe account, configured only on the host.
+    const email = process.env.PERSONAL_ACCOUNT_EMAIL || 'dev@wardrobe.local';
+    const name = process.env.PERSONAL_ACCOUNT_NAME || 'My Wardrobe';
     const id = email.replace(/[^a-z0-9]/gi, '-').toLowerCase();
 
     return {
