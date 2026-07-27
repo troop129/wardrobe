@@ -284,10 +284,9 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       console.error('Failed to run AI catalog cutout:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to run AI catalog cutout');
     } finally {
-      window.setTimeout(
-        () => setImageJob((prev) => (prev?.kind === 'ai_catalog' ? null : prev)),
-        600
-      );
+      // The mutation only resolves after the final image is written. Clear the
+      // overlay here instead of relying on a timer that can be delayed on mobile.
+      setImageJob((prev) => (prev?.kind === 'ai_catalog' ? null : prev));
     }
   };
 

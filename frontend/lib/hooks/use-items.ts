@@ -43,11 +43,11 @@ export function useItems(filters: ItemFilter = {}, page = 1, pageSize = 20) {
       return api.get<ItemListResponse>('/items', { params });
     },
     enabled: status !== 'loading',
-    // Poll more frequently when items are processing (every 5 seconds), otherwise every 30 seconds
+    // The detail dialog has its own job polling. Keep the wardrobe overview light.
     refetchInterval: (query) => {
       const data = query.state.data as ItemListResponse | undefined;
       const hasProcessing = data?.items?.some((item) => item.status === 'processing');
-      return hasProcessing ? 5000 : 30000;
+      return hasProcessing ? 10000 : 30000;
     },
   });
 }
@@ -236,7 +236,7 @@ async function pollItemJob(
   jobId: string,
   onProgress?: (status: ItemJobStatus) => void,
   {
-    intervalMs = 2000,
+    intervalMs = 4000,
     timeoutMs = 180_000,
   }: { intervalMs?: number; timeoutMs?: number } = {}
 ): Promise<ItemJobStatus> {
