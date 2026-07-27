@@ -130,6 +130,79 @@ and we were already switching this deployment to build from source (see
 [deployment.md](./deployment.md)), we added native capability-scoped endpoint
 config to `AIService` instead — simpler, no extra container.
 
+## Update: text moved off Ollama too (GPT-5.6 Luna)
+
+Status: **decided and implemented** (host `.env` updated, rebuilt from source,
+verified via `GET /api/v1/capabilities`).
+
+The "mixed provider" setup above was documented but never actually deployed to
+the host `.env` — it was still sitting at the original `llava:7b`/`gemma3:latest`
+defaults from initial setup. When it finally got exercised, local text
+generation on the 3070 Ti (`qwen3.5:9b`) felt noticeably slow for interactive
+use (outfit suggestions/pairings while using the app), so before deploying it
+for real we looked at free hosted-LLM options
+([cheahjs/free-llm-api-resources](https://github.com/cheahjs/free-llm-api-resources))
+as a speed fix, then decided to just use OpenAI for text too since credits
+were already available for the account used for vision.
+
+### Benchmark
+
+Ran the real `recommendation.txt` prompt (a 20-item mock wardrobe, "dinner
+date" / evening / 14°C context) against all three GPT-5.6 tiers, checking
+wall-clock latency, JSON validity, and the outfit slot rules (exactly one
+top/bottom/shoes, no duplicate items):
+
+| Model | Time | Valid | Cost/call | Output tokens | Reasoning tokens |
+|---|---|---|---|---|---|
+| `gpt-5.6-luna` | **8.91s** | ✅ | **$0.0067** | 850 | 481 |
+| `gpt-5.6-sol` | 11.97s | ✅ | $0.0235 | 510 | 262 |
+| `gpt-5.6-terra` | 18.47s | ✅ | $0.0239 | 1322 | 1012 |
+
+All three produced valid, correctly-structured outfits and picked essentially
+the same strongest combo for outfit #1. Terra's copy was marginally more
+observant (e.g. calling out "denim-on-denim" for a jeans + denim jacket pair,
+weaving the exact temperature into a highlight), but it was also the
+slowest *and* most expensive of the three here — it burned far more reasoning
+tokens (1012) than Luna or even flagship Sol, the opposite of what its
+mid-tier pricing would suggest. This was a single run per model, not a
+rigorous statistical eval, but the gap is large enough to trust directionally.
+
+Note: GPT-5.6 models require `max_completion_tokens` instead of the legacy
+`max_tokens` (see the note above) — the app's auto-retry handles this in
+production, but a standalone benchmark script needs to pass it explicitly.
+
+Decision: **`gpt-5.6-luna` for text**, keep `gpt-5.6-terra` for vision (no
+change there). Fallback path if Luna's quality disappoints on a real wardrobe
+(the synthetic test items favor easy, distinct pieces) is `gpt-5.6-terra`.
+
+Current config (both capabilities on one provider now, so the
+`AI_VISION_BASE_URL`/`AI_VISION_API_KEY` override from the mixed-provider
+setup above is no longer needed):
+
+```env
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+AI_VISION_MODEL=gpt-5.6-terra
+AI_TEXT_MODEL=gpt-5.6-luna
+```
+
+### Deployment gotcha hit doing this: CRLF-corrupted entrypoint scripts
+
+Rebuilding `backend`/`worker`/`frontend` from source on the Windows host (per
+the source-build compose change above) for the first time immediately crash-
+looped all three containers with `exec /docker-entrypoint.sh: no such file or
+directory`. Cause: this repo had no `.gitattributes`, so Windows git's default
+`core.autocrlf=true` silently rewrote `backend/docker-entrypoint.sh` and
+`frontend/docker-entrypoint.sh` to CRLF on checkout, which corrupts the
+`#!/bin/sh` shebang once that file is `COPY`'d into the Linux container image.
+
+Fix: added `.gitattributes` with `*.sh text eol=lf` to force LF regardless of
+the checking-out platform. `git add --renormalize .` alone was **not**
+sufficient to fix the already-checked-out working tree (it only affects what
+gets staged/re-checked-out going forward, not existing on-disk bytes) — had to
+explicitly strip the `\r` bytes from the two files in place before rebuilding
+for the fix to actually take effect in that same session.
+
 ## Virtual try-on (separate concern)
 
 The tandpfun-style modeled/virtual-try-on feature (see

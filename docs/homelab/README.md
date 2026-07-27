@@ -60,7 +60,11 @@ last edit:
 - [x] `.env` configured and stack deployed
 - [x] Verified LAN access from the Mac (`curl` to `10.0.0.246:3000` + health
       check) — not yet verified from the actual tablet/phone
-- [ ] AI model quality/speed validated with a real upload
+- [x] AI provider decided and deployed — OpenAI for both vision
+      (`gpt-5.6-terra`) and text (`gpt-5.6-luna`), source-built and verified
+      via `GET /api/v1/capabilities` (see [ai-setup.md](./ai-setup.md))
+- [ ] AI output quality validated with a real upload/wardrobe (the provider
+      choice above used a synthetic benchmark, not real items yet)
 - [ ] Gallery UI port (from tandpfun)
 - [ ] Virtual try-on POC (from tandpfun, OpenAI `gpt-image`)
 - [ ] Remote access for second user (deferred — Cloudflare Tunnel direction)
