@@ -284,7 +284,10 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
       console.error('Failed to run AI catalog cutout:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to run AI catalog cutout');
     } finally {
-      setTimeout(() => setImageJob(null), 600);
+      window.setTimeout(
+        () => setImageJob((prev) => (prev?.kind === 'ai_catalog' ? null : prev)),
+        600
+      );
     }
   };
 
@@ -323,8 +326,9 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   };
 
   const isAnalyzing = reanalyzeItem.isPending || item?.status === 'processing';
+  const hasActiveImageJob = !!imageJob && imageJob.progress < 100;
   const isImageBusy =
-    !!imageJob || removeBackground.isPending || aiCatalogCutout.isPending || isAnalyzing;
+    hasActiveImageJob || removeBackground.isPending || aiCatalogCutout.isPending || isAnalyzing;
 
   // Soft progress while AI tagging is processing (no fine-grained job %).
   useEffect(() => {

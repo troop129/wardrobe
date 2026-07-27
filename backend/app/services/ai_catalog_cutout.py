@@ -63,10 +63,14 @@ def build_catalog_prompt(chroma_rgb: tuple[int, int, int]) -> str:
         "the same empty garment only. Center the garment with generous padding. "
         f"Place it on a perfectly uniform solid {hex_color} chroma background "
         "(no gradients, no floor, no studio paper texture). "
-        "Remove any person, mannequin, hanger, tags, wrinkles, folds, shadows, "
-        "reflections, and props. Smooth the fabric while preserving the exact "
-        "color, silhouette, logos, prints, buttons, zippers, and construction "
-        "from the reference photo. Do not invent a different garment. "
+        "Remove only the person, mannequin, hanger, background clutter, cast shadows, "
+        "reflections, and unrelated props. Preserve the exact color, proportions, "
+        "silhouette, material texture, logos, prints, seams, stitching, panels, "
+        "buttons, zippers, hardware, and construction from the reference photo. "
+        "For footwear, keep the real toe shape, sole thickness and tread, laces, "
+        "eyelets, tongue, overlays, and all visible branding. Keep natural structural "
+        "folds; do not flatten, simplify, beautify away, or invent product details. "
+        "Do not invent a different garment. "
         "No text, watermarks, or borders."
     )
 
