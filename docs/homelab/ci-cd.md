@@ -152,6 +152,14 @@ get overwritten by the next auto-deploy unless `main` on GitHub matches.
 
 ## Troubleshooting
 
+- **Job fails immediately with `running scripts is disabled on this system`
+  (`PSSecurityException`)**: Windows PowerShell's default execution policy on
+  this host blocks the temp `.ps1` file GitHub Actions generates for each
+  `run:` step. `deploy.yml` already works around this by setting
+  `shell: powershell -ExecutionPolicy Bypass -Command ". '{0}'"` at the job
+  level instead of changing the host's execution policy machine-wide — if
+  you add a new self-hosted workflow and forget this, you'll hit the same
+  error.
 - **Runner shows Offline on GitHub**: `troop`'s interactive session isn't
   active (PC rebooted, nobody logged into console/RDP since). Log in and the
   Scheduled Task's `AtLogOn` trigger should start it; or

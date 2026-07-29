@@ -23,7 +23,11 @@ jobs:
     runs-on: [self-hosted, wardrobe-host]
     defaults:
       run:
-        shell: powershell
+        # Default `shell: powershell` runs the step as a generated .ps1 file,
+        # which Windows PowerShell refuses to load under the default
+        # Restricted/AllSigned execution policy on this host. Bypass it for
+        # just these job scripts rather than changing the policy machine-wide.
+        shell: powershell -ExecutionPolicy Bypass -Command ". '{0}'"
         working-directory: C:\Users\troop\wardrowbe
     steps:
       - name: Pull latest and rebuild
