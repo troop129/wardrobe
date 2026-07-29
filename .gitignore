@@ -55,6 +55,7 @@ k8s/*.secret.yaml
 
 # Local development
 *.local
+.dev-local/
 .claude/
 CLAUDE.md
 deploy.sh

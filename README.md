@@ -157,6 +157,17 @@ docker compose exec backend alembic upgrade head
 docker compose logs -f frontend backend
 ```
 
+If Docker builds are too slow for quick iteration (common on Mac, especially
+the first build or after a dependency change), `scripts/dev-local.sh` runs
+Postgres/Redis in small pre-built containers and the backend/frontend
+directly on the host — no image build at all. See
+[docs/homelab/local-dev.md](docs/homelab/local-dev.md).
+
+```bash
+./scripts/dev-local.sh          # http://localhost:3000, AI off by default
+./scripts/dev-local.sh --full   # + arq worker + rembg, full feature parity
+```
+
 ## AI Configuration
 
 Wardrowbe works with any OpenAI-compatible API. You need two types of models:
@@ -290,6 +301,11 @@ compose file with the version, e.g. `ghcr.io/anyesh/wardrowbe:backend-1.3.0`.
 > [docs/homelab/deployment.md](docs/homelab/deployment.md) for the actual
 > runbook used here. If you need k8s manifests, they're still available in
 > [upstream](https://github.com/Anyesh/wardrowbe/tree/main/k8s).
+
+Pushes to `main` on this fork auto-deploy to the Windows host via a
+self-hosted GitHub Actions runner — see
+[docs/homelab/ci-cd.md](docs/homelab/ci-cd.md) for how that's wired up and
+one-time setup.
 
 ## Configuration
 

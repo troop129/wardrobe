@@ -1,0 +1,53 @@
+name: Deploy to homelab
+
+# Runs on the self-hosted runner living on the Windows host, after CI passes
+# on main. See docs/homelab/ci-cd.md for how that runner is set up and why it
+# has to run inside an interactive login session rather than as a normal
+# Windows service.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: wardrobe-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, wardrobe-host]
+    defaults:
+      run:
+        shell: powershell
+        working-directory: C:\Users\troop\wardrowbe
+    steps:
+      - name: Pull latest and rebuild
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose build
+          docker compose up -d
+          docker compose exec -T backend alembic upgrade head
+
+      - name: Health check
+        run: |
+          $ok = $false
+          for ($i = 0; $i -lt 12; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://localhost:8000/api/v1/health
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ok) {
+            Write-Host "::error::Health check failed after deploy"
+            docker compose logs --tail=100 backend
+            exit 1
+          }
+          $sha = git rev-parse --short HEAD
+          Write-Host "Deployed $sha OK"

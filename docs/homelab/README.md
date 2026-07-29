@@ -16,6 +16,8 @@ reconstruct decisions from chat history.
 | [remote-access.md](./remote-access.md)                                  | How the dev machine (Mac) gets SSH access to the Windows host, key locations, and troubleshooting steps already hit                    |
 | [ai-setup.md](./ai-setup.md)                                            | Ollama model choices sized for the actual GPU/RAM, fallback options                                                                    |
 | [deployment.md](./deployment.md)                                        | Step-by-step Windows hosting runbook (Docker, `.env`, firewall, LAN access)                                                            |
+| [ci-cd.md](./ci-cd.md)                                                  | Auto-deploy: push to `main` → self-hosted GitHub Actions runner on the Windows host rebuilds and redeploys                             |
+| [local-dev.md](./local-dev.md)                                          | Fast local test loop on the Mac (`scripts/dev-local.sh`) that skips Docker builds entirely                                             |
 | [roadmap.md](./roadmap.md)                                              | Deferred/future work: gallery UI port, virtual try-on POC, remote access for a second user                                             |
 | [reference/tandpfun-wardrobe/](./reference/tandpfun-wardrobe/README.md) | Read-only snapshot of tandpfun/wardrobe (skills, gallery UI source, screenshots) pulled in for the roadmap items above                 |
 
@@ -68,3 +70,9 @@ last edit:
 - [x] Opt-in AI catalog cutout (OpenAI `images.edit` + chroma key) —
       deployed and smoke-tested on one item
 - [ ] Remote access for second user (deferred — Cloudflare Tunnel direction)
+- [ ] CI/CD: workflow + docs written (see [ci-cd.md](./ci-cd.md)) to
+      auto-deploy `main` to the Windows host via a self-hosted GitHub Actions
+      runner — the one-time runner registration/Scheduled Task setup on the
+      Windows host itself still needs to be done
+- [x] Fast local test loop on the Mac that skips Docker builds
+      (`scripts/dev-local.sh`, see [local-dev.md](./local-dev.md))
