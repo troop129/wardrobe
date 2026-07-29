@@ -72,7 +72,17 @@ SEASON_ADJACENCY = {
 }
 
 TOP_N = 70
+# No longer gates whether scoring runs (see score_items) — kept as a size constant
+# used by tests to build a "large wardrobe" fixture.
 MIN_ITEMS_FOR_SCORING = 50
+
+# Real `type` values (see clothing_analysis.txt / ai_service.VALID_TYPES) that count as
+# a warm mid/outer layer for weather scoring. "outerwear" is a *role* used elsewhere
+# (see utils/clothing.ITEM_ROLE) for body-slot dedup, not an actual item type — no item
+# is ever tagged with type="outerwear", so checking for that string here silently never
+# matched real jackets/coats/hoodies/blazers/cardigans/vests.
+WARM_LAYER_TYPES = ("jacket", "coat", "hoodie", "blazer", "cardigan", "vest", "sweater")
+RAIN_LAYER_TYPES = ("jacket", "coat")
 
 
 @dataclass
@@ -115,7 +125,7 @@ def _weather_score(
     score = 1.0
 
     if temp < cold_threshold:
-        if item_type in ("outerwear", "sweater") or material in ("wool", "fleece", "knit"):
+        if item_type in WARM_LAYER_TYPES or material in ("wool", "fleece", "knit"):
             score = 1.0
         elif "winter" in seasons:
             score = 1.0
@@ -126,14 +136,14 @@ def _weather_score(
     elif temp > hot_threshold:
         if material in ("cotton", "linen", "silk") or "summer" in seasons:
             score = 1.0
-        elif item_type in ("outerwear", "sweater", "boots"):
+        elif item_type in (*WARM_LAYER_TYPES, "boots"):
             score = 0.05
         else:
             score = 0.8
     else:
         score = 1.0
 
-    if weather.precipitation_chance > 50 and item_type == "outerwear":
+    if weather.precipitation_chance > 50 and item_type in RAIN_LAYER_TYPES:
         score = min(1.0, score + 0.1)
 
     return score
@@ -281,10 +291,16 @@ def score_items(
     recently_worn_dates: dict[UUID, date],
     mandatory_item_ids: set[UUID] | None = None,
 ) -> list[ScoredItem]:
-    if len(items) < MIN_ITEMS_FOR_SCORING:
-        scored = [ScoredItem(item=item) for item in items]
-        return _sort_mandatory_first(scored, mandatory_item_ids)
-
+    # Scoring always runs, regardless of wardrobe size. It used to short-circuit
+    # (returning every item with a flat score of 1.0, in arbitrary DB-query order)
+    # below MIN_ITEMS_FOR_SCORING, on the assumption that a small wardrobe doesn't
+    # need filtering. But TOP_N slicing below already keeps every item when there
+    # are fewer than TOP_N of them — the short-circuit didn't just skip filtering,
+    # it also skipped *ranking*, silently no-op'ing weather/formality/season/
+    # recency/preference scoring for exactly the (very common) wardrobe sizes a
+    # single self-hosted user is likely to have. The recommendation prompt tells
+    # the model "items are pre-ranked by suitability, prefer items near the top" —
+    # for any wardrobe under 50 items that was never true.
     avoid_days = 7
     if preferences and preferences.avoid_repeat_days is not None:
         avoid_days = preferences.avoid_repeat_days

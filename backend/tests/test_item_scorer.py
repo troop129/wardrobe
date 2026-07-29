@@ -73,7 +73,7 @@ def _prefs(**kwargs) -> UserPreference:
 
 class TestWeatherScore:
     def test_cold_outerwear_scores_high(self):
-        item = _item(type="outerwear")
+        item = _item(type="jacket")
         assert _weather_score(item, _weather(temp=5), None) == 1.0
 
     def test_cold_shorts_scores_low(self):
@@ -96,8 +96,16 @@ class TestWeatherScore:
         assert _weather_score(item, _weather(temp=12), prefs) == 0.05
 
     def test_rain_boosts_outerwear(self):
-        item = _item(type="outerwear")
+        item = _item(type="jacket")
         assert _weather_score(item, _weather(temp=18, precipitation=60), None) == 1.0
+
+    def test_hot_hoodie_scores_low(self):
+        # Regression test: "hoodie" (a real item type) must be penalized in hot
+        # weather. It previously only checked for the fictional type "outerwear",
+        # which no real item is ever tagged with, so hoodies/jackets/coats/blazers/
+        # cardigans/vests never got penalized in hot weather.
+        item = _item(type="hoodie")
+        assert _weather_score(item, _weather(temp=30), None) == 0.05
 
     def test_cold_wool_scores_high(self):
         item = _item(type="shirt", material="wool")
@@ -245,7 +253,7 @@ class TestScoreItems:
     def test_sorts_descending(self):
         items = [
             _item(type="shorts"),
-            _item(type="outerwear"),
+            _item(type="jacket"),
         ]
         filler = [_item() for _ in range(MIN_ITEMS_FOR_SCORING - 2)]
         all_items = items + filler
@@ -262,7 +270,7 @@ class TestScoreItems:
             recently_worn_dates={},
         )
 
-        outerwear_pos = next(i for i, s in enumerate(result) if s.item.type == "outerwear")
+        outerwear_pos = next(i for i, s in enumerate(result) if s.item.type == "jacket")
         shorts_pos = next(i for i, s in enumerate(result) if s.item.type == "shorts")
         assert outerwear_pos < shorts_pos
 
@@ -302,7 +310,11 @@ class TestScoreItems:
         assert result[0].item.id == mandatory_item.id
         assert mandatory_item.id in {s.item.id for s in result}
 
-    def test_small_wardrobe_skips_scoring(self):
+    def test_small_wardrobe_keeps_all_items(self):
+        # Below MIN_ITEMS_FOR_SCORING, but scoring must still run — see
+        # test_small_wardrobe_still_ranks_by_suitability. All-default items happen
+        # to score 1.0 regardless (moderate weather, matching occasion formality,
+        # never worn, no preferences), so this only asserts nothing gets dropped.
         items = [_item() for _ in range(10)]
         result = score_items(
             items=items,
@@ -317,6 +329,33 @@ class TestScoreItems:
         )
         assert len(result) == 10
         assert all(s.score == 1.0 for s in result)
+
+    def test_small_wardrobe_still_ranks_by_suitability(self):
+        # Regression test: scoring used to short-circuit entirely for wardrobes
+        # under MIN_ITEMS_FOR_SCORING (50), returning every item unscored in
+        # arbitrary DB order. That's the common case for a single self-hosted
+        # user's real wardrobe, so occasion/weather never actually influenced which
+        # items the AI saw ranked first for most real users.
+        good_item = _item(type="hoodie", formality="very-casual")
+        bad_item = _item(type="blazer", formality="formal")
+        items = [bad_item, good_item] + [_item() for _ in range(8)]
+        assert len(items) < MIN_ITEMS_FOR_SCORING
+
+        result = score_items(
+            items=items,
+            weather=_weather(temp=5),
+            occasion="sporty",
+            preferences=None,
+            user_today=date(2026, 3, 8),
+            current_season="winter",
+            learned_prefs=None,
+            good_pairs={},
+            recently_worn_dates={},
+        )
+
+        good_pos = next(i for i, s in enumerate(result) if s.item.id == good_item.id)
+        bad_pos = next(i for i, s in enumerate(result) if s.item.id == bad_item.id)
+        assert good_pos < bad_pos
 
     def test_bad_weather_tanks_score(self):
         items = [_item(type="shorts") for _ in range(MIN_ITEMS_FOR_SCORING)]

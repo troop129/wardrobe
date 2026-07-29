@@ -211,10 +211,6 @@ class RecommendationService:
             if item.pattern and item.pattern != "solid":
                 parts.append(item.pattern)
 
-            item_size = getattr(item, "size", None)
-            if item_size:
-                parts.append(f"size {item_size}")
-
             if item.material:
                 parts.append(item.material)
 
@@ -230,6 +226,12 @@ class RecommendationService:
             fit = item.tags.get("fit") if item.tags else None
             if fit:
                 parts.append(f"{fit} fit")
+
+            # Human-readable AI caption — carries construction/texture detail
+            # (collar shape, trims, silhouette cues) that the structured tags
+            # above don't capture, e.g. "sherpa collar", "pleated front".
+            if item.ai_description:
+                parts.append(f'looks like: "{item.ai_description}"')
 
             if item.name:
                 parts.insert(0, f'"{item.name}"')

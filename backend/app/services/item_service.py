@@ -9,6 +9,7 @@ from sqlalchemy.orm import attributes, selectinload
 
 from app.models.item import ClothingItem, ItemHistory, ItemStatus, TaggingStatus, WashHistory
 from app.schemas.item import DEFAULT_WASH_INTERVALS, ItemCreate, ItemFilter, ItemUpdate
+from app.utils.clothing import normalize_color, normalize_type
 
 
 class ItemService:
@@ -177,11 +178,11 @@ class ItemService:
             thumbnail_path=image_paths.get("thumbnail_path"),
             medium_path=image_paths.get("medium_path"),
             image_hash=image_paths.get("image_hash"),
-            type=item_data.type,
+            type=normalize_type(item_data.type),
             subtype=item_data.subtype,
             tags=tags,
-            colors=item_data.colors or [],
-            primary_color=item_data.primary_color,
+            colors=[c for c in (normalize_color(c) for c in (item_data.colors or [])) if c],
+            primary_color=normalize_color(item_data.primary_color),
             status=ItemStatus.processing,  # AI analysis will update to ready
             name=item_data.name,
             brand=item_data.brand,
@@ -199,12 +200,31 @@ class ItemService:
     async def update(self, item: ClothingItem, item_data: ItemUpdate) -> ClothingItem:
         update_data = item_data.model_dump(exclude_unset=True)
 
+        # Normalize free-text type/color spellings (e.g. "grey" -> "gray",
+        # "tee" -> "t-shirt") so downstream scoring, dedup, and preference
+        # matching — all raw string comparisons — see a consistent vocabulary
+        # regardless of how the edit was made (UI, API script, external agent).
+        if update_data.get("type"):
+            update_data["type"] = normalize_type(update_data["type"])
+        if update_data.get("primary_color"):
+            update_data["primary_color"] = normalize_color(update_data["primary_color"])
+        if update_data.get("colors"):
+            update_data["colors"] = [normalize_color(c) for c in update_data["colors"]]
+
         if "tags" in update_data and update_data["tags"]:
             tags = update_data["tags"]
             if isinstance(tags, dict):
                 update_data["tags"] = {k: v for k, v in tags.items() if v is not None}
             else:
                 update_data["tags"] = tags.model_dump(exclude_none=True)
+            if update_data["tags"].get("primary_color"):
+                update_data["tags"]["primary_color"] = normalize_color(
+                    update_data["tags"]["primary_color"]
+                )
+            if update_data["tags"].get("colors"):
+                update_data["tags"]["colors"] = [
+                    normalize_color(c) for c in update_data["tags"]["colors"]
+                ]
 
         for field, value in update_data.items():
             setattr(item, field, value)

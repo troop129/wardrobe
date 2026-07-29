@@ -1,6 +1,12 @@
 from uuid import uuid4
 
-from app.utils.clothing import ITEM_ROLE, canonical_item_order, deduplicate_by_body_slot
+from app.utils.clothing import (
+    ITEM_ROLE,
+    canonical_item_order,
+    deduplicate_by_body_slot,
+    normalize_color,
+    normalize_type,
+)
 
 
 def _ids(n):
@@ -202,3 +208,40 @@ def test_canonical_order_full_outfit():
 def test_canonical_order_empty_list():
     result = canonical_item_order([], {})
     assert result == []
+
+
+class TestNormalizeType:
+    def test_known_alias(self):
+        assert normalize_type("tee") == "t-shirt"
+        assert normalize_type("fragrance") == "cologne"
+
+    def test_case_and_whitespace_insensitive(self):
+        assert normalize_type("  TEE ") == "t-shirt"
+
+    def test_unknown_value_passes_through_lowercased(self):
+        assert normalize_type("Jacket") == "jacket"
+
+    def test_none_passes_through(self):
+        assert normalize_type(None) is None
+
+    def test_empty_string_passes_through(self):
+        assert normalize_type("") == ""
+
+
+class TestNormalizeColor:
+    def test_known_aliases(self):
+        assert normalize_color("grey") == "gray"
+        assert normalize_color("charcoal") == "gray"
+        assert normalize_color("beluga") == "gray"
+        assert normalize_color("dark blue") == "navy"
+        assert normalize_color("dark brown") == "brown"
+        assert normalize_color("dark grey") == "gray"
+
+    def test_case_and_whitespace_insensitive(self):
+        assert normalize_color(" Grey ") == "gray"
+
+    def test_unknown_value_passes_through_lowercased(self):
+        assert normalize_color("Chartreuse") == "chartreuse"
+
+    def test_none_passes_through(self):
+        assert normalize_color(None) is None
