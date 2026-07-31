@@ -94,7 +94,9 @@ def descriptive_item_name(
     type_key = (item_type or "").strip().lower() or None
     brand_part = format_brand(brand) if brand and brand.strip() else None
     subtype_part = subtype.strip() if subtype and subtype.strip() else None
-    color_part = format_vocab_token(primary_color) if primary_color and primary_color.strip() else None
+    color_part = (
+        format_vocab_token(primary_color) if primary_color and primary_color.strip() else None
+    )
     fit_part = format_vocab_token(fit) if fit and fit.strip() else None
     type_part = (
         format_vocab_token(item_type)

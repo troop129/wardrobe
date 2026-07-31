@@ -6,6 +6,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # arq pins redis<6; ignore major redis bumps until arq supports them
+    ignore:
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
     groups:
       python-dependencies:
         patterns:

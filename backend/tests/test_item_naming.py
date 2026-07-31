@@ -1,6 +1,5 @@
 from app.schemas.item import DEFAULT_WASH_INTERVALS, default_wash_interval
-from app.services.ai_service import VALID_TYPES, AIService
-from app.services.ai_service import ClothingTags
+from app.services.ai_service import VALID_TYPES, AIService, ClothingTags
 from app.utils.item_naming import (
     descriptive_item_name,
     format_brand,

@@ -31,10 +31,7 @@ def upgrade() -> None:
     )
     # Existing wardrobe already ran AI catalog cutout on every item with an image.
     op.execute(
-        sa.text(
-            "UPDATE clothing_items SET ai_catalog_cutout = true "
-            "WHERE image_path IS NOT NULL"
-        )
+        sa.text("UPDATE clothing_items SET ai_catalog_cutout = true WHERE image_path IS NOT NULL")
     )
 
 
