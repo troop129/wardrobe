@@ -78,8 +78,7 @@ type FilterChip =
   | 'my-looks'
   | 'worn'
   | 'pairings'
-  | 'replacements'
-  | 'ai';
+  | 'replacements';
 
 type ViewMode = 'list' | 'calendar';
 
@@ -89,7 +88,6 @@ const CHIP_ORDER: FilterChip[] = [
   'worn',
   'pairings',
   'replacements',
-  'ai',
 ];
 
 const CHIP_LABELS: Record<FilterChip, string> = {
@@ -98,7 +96,6 @@ const CHIP_LABELS: Record<FilterChip, string> = {
   worn: 'Worn',
   pairings: 'Pairings',
   replacements: 'Replacements',
-  ai: 'AI',
 };
 
 function chipToFilters(chip: FilterChip, search: string): OutfitFilters {
@@ -118,9 +115,6 @@ function chipToFilters(chip: FilterChip, search: string): OutfitFilters {
     case 'replacements':
       filters.is_replacement = true;
       return filters;
-    case 'ai':
-      filters.source = 'scheduled,on_demand';
-      return filters;
     case 'all':
     default:
       return filters;
@@ -133,16 +127,18 @@ const EMPTY_MESSAGES: Record<FilterChip, string> = {
   worn: 'No worn outfits recorded.',
   pairings: 'No pairing outfits generated.',
   replacements: 'No replacement outfits.',
-  ai: 'No AI-generated outfits.',
 };
 
 function OutfitsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawFilter = (searchParams.get('filter') as FilterChip) || 'all';
+  const rawFilter = searchParams.get('filter');
   const urlView: ViewMode = searchParams.get('view') === 'calendar' ? 'calendar' : 'list';
+  const parsedFilter = CHIP_ORDER.includes(rawFilter as FilterChip)
+    ? (rawFilter as FilterChip)
+    : 'all';
   const urlFilter: FilterChip =
-    urlView === 'calendar' && rawFilter === 'my-looks' ? 'all' : rawFilter;
+    urlView === 'calendar' && parsedFilter === 'my-looks' ? 'all' : parsedFilter;
   const chip: FilterChip = urlFilter;
   const view: ViewMode = urlView;
   const urlMonth = parseMonthParam(searchParams.get('month'));
@@ -150,7 +146,6 @@ function OutfitsPageContent() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [defaultChecked, setDefaultChecked] = useState(false);
   const [monthRef, setMonthRef] = useState<MonthRef>(urlMonth ?? currentMonthRef());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
@@ -195,24 +190,6 @@ function OutfitsPageContent() {
     monthRef.month,
     view === 'calendar' ? filters : {},
   );
-
-  const lookbookProbe = useOutfits({ is_lookbook: true }, 1, 1);
-
-  useEffect(() => {
-    if (defaultChecked) return;
-    if (urlFilter !== 'all' || urlView === 'calendar') {
-      setDefaultChecked(true);
-      return;
-    }
-    if (lookbookProbe.data) {
-      if (lookbookProbe.data.total === 0) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('filter', 'my-looks');
-        router.replace(`/dashboard/outfits?${params.toString()}`);
-      }
-      setDefaultChecked(true);
-    }
-  }, [defaultChecked, lookbookProbe.data, urlFilter, urlView, searchParams, router]);
 
   const updateQuery = useCallback(
     (next: {
@@ -395,7 +372,7 @@ function OutfitsPageContent() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Outfits</h1>
-          <p className="text-muted-foreground">Your looks, worn outfits, and AI suggestions</p>
+          <p className="text-muted-foreground">Your looks, worn outfits, and pairings</p>
         </div>
         <div className="flex items-center gap-3">
           <div
