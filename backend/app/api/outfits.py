@@ -779,9 +779,14 @@ class KeepTogetherResponse(BaseModel):
     message: str
 
 
+class KeepTogetherRequest(BaseModel):
+    item_ids: list[UUID] = Field(min_length=2, max_length=2)
+
+
 @router.post("/{outfit_id}/keep-together", response_model=KeepTogetherResponse)
 async def keep_outfit_together(
     outfit_id: UUID,
+    request: KeepTogetherRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> KeepTogetherResponse:
@@ -793,15 +798,24 @@ async def keep_outfit_together(
     outfit = result.scalar_one_or_none()
     if outfit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outfit not found")
-    saved = await LearningService(db).record_explicit_pair_preferences(outfit)
+    selected_ids = set(request.item_ids)
+    outfit_ids = {outfit_item.item_id for outfit_item in outfit.items}
+    if len(selected_ids) != 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Choose two different items"
+        )
+    if not selected_ids.issubset(outfit_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both selected items must belong to this outfit",
+        )
+    saved = await LearningService(db).record_explicit_pair_preferences(outfit, list(selected_ids))
     if saved:
         await clear_suggestions(current_user.id, outfit.occasion)
     return KeepTogetherResponse(
         saved_pairs=saved,
         message=(
-            f"Saved {saved} new keep-together pair{'s' if saved != 1 else ''}."
-            if saved
-            else "This combination was already saved."
+            "Saved this pair for future suggestions." if saved else "This pair was already saved."
         ),
     )
 
@@ -1007,22 +1021,30 @@ async def refine_outfit(
     wants_together = any(
         phrase in message for phrase in ("together", "i like", "would wear", "save this combo")
     )
+    needs_pair_choice = False
     if wants_together:
-        pair_ids = [item.id for item in mentioned] if len(mentioned) >= 2 else None
+        pair_ids = [item.id for item in mentioned if item.id in set(item_ids)]
         full_updated = await service.get_full_outfit(updated.id)
-        saved_pairs = await LearningService(db).record_explicit_pair_preferences(
-            full_updated, pair_ids
-        )
+        if len(set(pair_ids)) == 2:
+            saved_pairs = await LearningService(db).record_explicit_pair_preferences(
+                full_updated, pair_ids
+            )
+        else:
+            needs_pair_choice = True
         updated = full_updated
 
     await clear_suggestions(current_user.id, outfit.occasion)
     full = await service.get_full_outfit(updated.id)
     if changed and saved_pairs:
         reply = f"Updated the outfit and saved {saved_pairs} keep-together pairs."
+    elif changed and needs_pair_choice:
+        reply = "Updated the outfit. Name exactly two pieces if you want me to keep them paired."
     elif changed:
         reply = "Updated the outfit using your available clean items."
     elif saved_pairs:
-        reply = f"Saved {saved_pairs} keep-together pairs for future suggestions."
+        reply = "Saved that pair for future suggestions."
+    elif needs_pair_choice:
+        reply = "Which two pieces should stay together? Name exactly two, such as the blue jacket and white shirt."
     else:
         reply = (
             "I could not map that to an item yet. Try ‘different shoes’, ‘add a layer’, "

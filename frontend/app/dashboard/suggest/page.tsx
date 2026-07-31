@@ -41,6 +41,15 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -474,16 +483,25 @@ function OutfitResult({
   wardrobeItems: Item[];
   onSwap: (currentId: string, replacementId: string) => Promise<void>;
   onRefine: (message: string) => Promise<string>;
-  onKeepTogether: () => Promise<void>;
+  onKeepTogether: (itemIds: string[]) => Promise<void>;
 }) {
   const [refinement, setRefinement] = useState('');
   const [assistantReply, setAssistantReply] = useState('');
+  const [pairDialogOpen, setPairDialogOpen] = useState(false);
+  const [selectedPairIds, setSelectedPairIds] = useState<string[]>([]);
 
   const submitRefinement = async () => {
     if (!refinement.trim() || isResponding) return;
     const reply = await onRefine(refinement.trim());
     setAssistantReply(reply);
     setRefinement('');
+  };
+
+  const saveSelectedPair = async () => {
+    if (selectedPairIds.length !== 2 || isResponding) return;
+    await onKeepTogether(selectedPairIds);
+    setPairDialogOpen(false);
+    setSelectedPairIds([]);
   };
 
   return (
@@ -590,14 +608,101 @@ function OutfitResult({
               {isResponding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-2 h-4 w-4" />}
               Apply
             </Button>
-            <Button variant="outline" size="sm" onClick={onKeepTogether} disabled={isResponding}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedPairIds([]);
+                setPairDialogOpen(true);
+              }}
+              disabled={isResponding}
+            >
               <Link2 className="mr-2 h-4 w-4" />
-              Keep these together
+              Save an item pair
             </Button>
           </div>
           {assistantReply && <p className="rounded-lg bg-muted p-2.5 text-sm text-muted-foreground">{assistantReply}</p>}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={pairDialogOpen}
+        onOpenChange={(open) => {
+          setPairDialogOpen(open);
+          if (!open) setSelectedPairIds([]);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose two pieces</DialogTitle>
+            <DialogDescription>
+              Select the exact relationship to remember. Other items in the outfit will not be paired.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+            {outfit.items.map((item) => {
+              const checked = selectedPairIds.includes(item.id);
+              const selectionFull = selectedPairIds.length === 2 && !checked;
+              return (
+                <label
+                  key={item.id}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-3 rounded-xl border p-2.5 transition-colors',
+                    checked && 'border-primary bg-primary/5',
+                    selectionFull && 'cursor-not-allowed opacity-50',
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    disabled={isResponding || selectionFull}
+                    onCheckedChange={(value) => {
+                      setSelectedPairIds((current) =>
+                        value === true
+                          ? current.length < 2 ? [...current, item.id] : current
+                          : current.filter((id) => id !== item.id),
+                      );
+                    }}
+                    aria-label={`Pair ${item.name || item.type}`}
+                  />
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
+                    {item.thumbnail_url || item.image_url ? (
+                      <Image
+                        src={item.thumbnail_url || item.image_url || ''}
+                        alt={item.name || item.type}
+                        fill
+                        className="object-contain"
+                        sizes="56px"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Shirt className="h-5 w-5 text-muted-foreground/50" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.name || item.type}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[itemSlotLabel(item.type), item.brand, item.primary_color].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {selectedPairIds.length}/2 selected
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPairDialogOpen(false)} disabled={isResponding}>
+              Cancel
+            </Button>
+            <Button onClick={saveSelectedPair} disabled={selectedPairIds.length !== 2 || isResponding}>
+              {isResponding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+              Save pair
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Action buttons */}
       <div className="flex gap-3 justify-center">
@@ -779,13 +884,14 @@ export default function SuggestPage() {
     }
   };
 
-  const handleKeepTogether = async () => {
+  const handleKeepTogether = async (itemIds: string[]) => {
     if (!outfit || isResponding) return;
     if (session?.accessToken) setAccessToken(session.accessToken as string);
     setIsResponding(true);
     try {
       const result = await api.post<{ saved_pairs: number; message: string }>(
         `/outfits/${outfit.id}/keep-together`,
+        { item_ids: itemIds },
       );
       toast.success(result.message);
     } catch (error) {

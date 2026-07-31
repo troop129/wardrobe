@@ -125,13 +125,22 @@ async def test_detailed_feedback_keeps_acceptance_counts_idempotent(
 async def test_keep_together_creates_immediate_idempotent_pair_preferences(
     client, test_user, auth_headers, db_session
 ):
-    outfit, _ = await _create_pending_outfit(db_session, test_user.id)
+    outfit, items = await _create_pending_outfit(db_session, test_user.id)
+    selected = {"item_ids": [str(items[0].id), str(items[1].id)]}
 
-    first = await client.post(f"/api/v1/outfits/{outfit.id}/keep-together", headers=auth_headers)
-    repeated = await client.post(f"/api/v1/outfits/{outfit.id}/keep-together", headers=auth_headers)
+    first = await client.post(
+        f"/api/v1/outfits/{outfit.id}/keep-together",
+        headers=auth_headers,
+        json=selected,
+    )
+    repeated = await client.post(
+        f"/api/v1/outfits/{outfit.id}/keep-together",
+        headers=auth_headers,
+        json=selected,
+    )
 
     assert first.status_code == 200
-    assert first.json()["saved_pairs"] == 3
+    assert first.json()["saved_pairs"] == 1
     assert repeated.status_code == 200
     assert repeated.json()["saved_pairs"] == 0
     pairs = list(
@@ -143,9 +152,25 @@ async def test_keep_together_creates_immediate_idempotent_pair_preferences(
         .scalars()
         .all()
     )
-    assert len(pairs) == 3
+    assert len(pairs) == 1
+    assert {pairs[0].item1_id, pairs[0].item2_id} == {items[0].id, items[1].id}
     assert all(pair.times_paired == 2 for pair in pairs)
     assert all(float(pair.compatibility_score) > 0.3 for pair in pairs)
+
+
+@pytest.mark.asyncio
+async def test_keep_together_requires_exactly_two_outfit_items(
+    client, test_user, auth_headers, db_session
+):
+    outfit, items = await _create_pending_outfit(db_session, test_user.id)
+
+    response = await client.post(
+        f"/api/v1/outfits/{outfit.id}/keep-together",
+        headers=auth_headers,
+        json={"item_ids": [str(item.id) for item in items]},
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
