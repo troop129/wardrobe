@@ -151,7 +151,11 @@ class TestRemoveBackgroundEndpointBackup:
 class TestRestoreOriginalEndpoint:
     @pytest.mark.asyncio
     async def test_restores_and_clears_backup(
-        self, client: AsyncClient, auth_headers, item_with_image: ClothingItem
+        self,
+        client: AsyncClient,
+        auth_headers,
+        item_with_image: ClothingItem,
+        db_session: AsyncSession,
     ):
         with patch("app.services.background_removal.get_provider", return_value=_mock_provider()):
             removal = await client.post(
@@ -162,6 +166,9 @@ class TestRestoreOriginalEndpoint:
         backup_path = removal.json()["original_image_path"]
         png_path = removal.json()["image_path"]
 
+        item_with_image.ai_catalog_cutout = True
+        await db_session.commit()
+
         response = await client.post(
             f"/api/v1/items/{item_with_image.id}/restore-original",
             headers=auth_headers,
@@ -170,6 +177,7 @@ class TestRestoreOriginalEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["original_image_path"] is None
+        assert data["ai_catalog_cutout"] is False
         assert data["image_path"].endswith(".jpg")
         svc = ImageService()
         assert _close(_pixel(svc.get_image_path(data["image_path"])), GREEN)

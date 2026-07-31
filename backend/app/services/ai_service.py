@@ -12,6 +12,7 @@ from PIL import Image, ImageOps
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.utils.clothing import normalize_type
 from app.utils.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class ClothingTags(BaseModel):
     fit: str | None = None
     occasion: list[str] = []
     brand: str | None = None
+    name: str | None = None
     condition: str | None = None
     features: list[str] = []
     confidence: float = 0.0
@@ -465,13 +467,22 @@ class AIService:
         tags = ClothingTags()
         tags.raw_response = response_text
 
-        item_type = validate_value(data.get("type"), VALID_TYPES)
+        raw_type = data.get("type")
+        if isinstance(raw_type, str):
+            raw_type = normalize_type(raw_type)
+        item_type = validate_value(raw_type, VALID_TYPES)
         if item_type:
             tags.type = item_type
         else:
             tags.type = "unknown"
 
         tags.subtype = data.get("subtype") if data.get("subtype") else None
+        brand = data.get("brand")
+        if isinstance(brand, str) and brand.strip():
+            tags.brand = brand.strip()[:100]
+        name = data.get("name")
+        if isinstance(name, str) and name.strip():
+            tags.name = name.strip()[:100]
         tags.primary_color = validate_value(data.get("primary_color"), VALID_COLORS)
         tags.colors = validate_list(data.get("colors", []), VALID_COLORS)
         tags.pattern = validate_value(data.get("pattern"), VALID_PATTERNS)

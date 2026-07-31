@@ -39,6 +39,7 @@ export interface Item {
   primary_color?: string;
   status: 'processing' | 'ready' | 'error' | 'archived';
   ai_processed: boolean;
+  ai_catalog_cutout: boolean;
   ai_confidence?: number;
   ai_description?: string;
   tagging_status: 'pending' | 'tagged';

@@ -46,6 +46,7 @@ from app.services.ai_service import AIDisabledError, AIService
 from app.services.image_service import ImageService
 from app.services.item_service import ItemService
 from app.utils.auth import get_current_user
+from app.utils.item_naming import resolve_item_name
 from app.workers.settings import get_redis_settings
 
 logger = logging.getLogger(__name__)
@@ -84,16 +85,6 @@ def _merge_note(existing: str | None, incoming: str | None) -> str | None:
     if not existing or incoming.lower() not in existing.lower():
         return f"{existing.strip()}\n{incoming}".strip() if existing else incoming
     return existing
-
-
-def _descriptive_item_name(item: ClothingItem) -> str | None:
-    """A dependable readable name when the chat model omits or keeps a vague one."""
-    fit = (item.tags or {}).get("fit")
-    parts = [item.brand, item.primary_color, fit, item.type if item.type != "unknown" else None]
-    clean = [str(part).strip() for part in parts if isinstance(part, str) and part.strip()]
-    if len(clean) < 2:
-        return None
-    return " ".join(clean).title().replace("H&M", "H&M")
 
 
 async def _maybe_queue_background_removal(db: AsyncSession, item_id: UUID, image_path: str) -> None:
@@ -757,8 +748,10 @@ async def apply_item_assistant(
         "Current item: " + json.dumps(snapshot) + "\n\n"
         "What the owner said: " + request.message + "\n\n"
         "Return JSON only with keys name, brand, type, subtype, primary_color, colors, tags, notes, summary. "
-        "Always provide name: make it a concise human-friendly name rebuilt from the current facts and the "
-        "owner's message (brand + color + fit/style + garment where known), even when an older name exists. "
+        "Always provide name: a concise human-friendly label from the owner's message and known facts. "
+        "Preserve proper names and brand casing exactly as written (e.g. Dior Sauvage, YSL, McQueen, H&M) — "
+        "do not title-case acronyms. For cologne/perfume use brand + product name; for shoes use brand + "
+        "model/colorway when known; for clothing use brand + color + garment. "
         "Only include facts stated by the owner or already present. tags may use fit, material, pattern, style, "
         "formality, season, features, care_preferences, pairing_preferences. Keep notes as a concise durable "
         "reminder of personal preferences (not a chat transcript). Use null or [] when nothing should change."
@@ -766,7 +759,10 @@ async def apply_item_assistant(
     try:
         raw = await AIService().generate_text(
             prompt,
-            system_prompt="You maintain a personal wardrobe. Never invent garment facts. Return valid JSON only.",
+            system_prompt=(
+                "You maintain a personal wardrobe including clothing, shoes, and fragrance. "
+                "Never invent facts. Preserve brand and product name casing. Return valid JSON only."
+            ),
         )
     except AIDisabledError as exc:
         raise HTTPException(
@@ -785,6 +781,8 @@ async def apply_item_assistant(
         )
 
     updated: list[str] = []
+    existing_name = item.name
+    assistant_name: str | None = None
     for field, max_len in (
         ("name", 100),
         ("brand", 100),
@@ -795,6 +793,9 @@ async def apply_item_assistant(
         value = data.get(field)
         if isinstance(value, str) and value.strip():
             value = value.strip()[:max_len]
+            if field == "name":
+                assistant_name = value
+                continue
             if getattr(item, field) != value:
                 setattr(item, field, value)
                 updated.append(field)
@@ -827,9 +828,17 @@ async def apply_item_assistant(
         if clean_tags:
             item.tags = {**(item.tags or {}), **clean_tags}
             updated.append("tags")
-    generated_name = _descriptive_item_name(item)
-    if generated_name and item.name != generated_name:
-        item.name = generated_name[:100]
+    resolved_name = resolve_item_name(
+        preferred=assistant_name,
+        existing=existing_name,
+        brand=item.brand,
+        primary_color=item.primary_color,
+        fit=(item.tags or {}).get("fit") if isinstance((item.tags or {}).get("fit"), str) else None,
+        item_type=item.type,
+        subtype=item.subtype,
+    )
+    if resolved_name and item.name != resolved_name:
+        item.name = resolved_name
         if "name" not in updated:
             updated.append("name")
     notes = _merge_note(item.notes, data.get("notes") or request.message)
@@ -1487,6 +1496,7 @@ async def restore_item_original(
     item.medium_path = restored["medium_path"]
     item.thumbnail_path = restored["thumbnail_path"]
     item.original_image_path = None
+    item.ai_catalog_cutout = False
     await db.commit()
     await db.refresh(
         item,
@@ -1495,6 +1505,7 @@ async def restore_item_original(
             "medium_path",
             "thumbnail_path",
             "original_image_path",
+            "ai_catalog_cutout",
             "updated_at",
         ],
     )
@@ -1551,6 +1562,7 @@ async def replace_item_image(
     item.thumbnail_path = image_paths["thumbnail_path"]
     item.image_hash = image_paths["image_hash"]
     item.original_image_path = None
+    item.ai_catalog_cutout = False
     await db.commit()
     await db.refresh(
         item,
@@ -1560,6 +1572,7 @@ async def replace_item_image(
             "thumbnail_path",
             "image_hash",
             "original_image_path",
+            "ai_catalog_cutout",
             "updated_at",
         ],
     )

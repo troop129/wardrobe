@@ -519,7 +519,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       ) : (
                         <Wand2 className="h-4 w-4" />
                       )}
-                      AI catalog cutout
+                      {item.ai_catalog_cutout ? 'Redo AI catalog cutout' : 'AI catalog cutout'}
                     </DropdownMenuItem>
                   )}
                   {item.original_image_path && (

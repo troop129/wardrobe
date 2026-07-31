@@ -7,22 +7,32 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from app.utils.signed_urls import sign_image_url
 
 # Default wash intervals by clothing type (wears between washes). A value of
-# None means the item is not wash-tracked by Wardrowbe.
+# None means the item is not wash-tracked by Wardrowbe. Unknown / non-apparel
+# types must stay None — never fall back to a generic laundry cycle.
 DEFAULT_WASH_INTERVALS: dict[str, int | None] = {
+    # Apparel
     "t-shirt": 1,
     "shirt": 2,
     "blouse": 2,
+    "polo": 2,
+    "tank-top": 1,
+    "top": 2,
     "pants": 4,
     "jeans": 6,
     "shorts": 3,
     "dress": 2,
     "skirt": 3,
+    "jumpsuit": 2,
     "sweater": 5,
     "hoodie": 4,
+    "cardigan": 5,
+    "vest": 5,
     "jacket": 8,
     "coat": 10,
     "blazer": 5,
     "suit": 5,
+    "socks": 1,
+    # Footwear, fragrance, accessories — not laundry-tracked
     "shoes": None,
     "sneakers": None,
     "boots": None,
@@ -34,8 +44,16 @@ DEFAULT_WASH_INTERVALS: dict[str, int | None] = {
     "bag": None,
     "accessories": None,
     "cologne": None,
-    "other": 3,
+    "unknown": None,
+    "other": None,
 }
+
+
+def default_wash_interval(item_type: str | None) -> int | None:
+    """Resolve the default wash interval for a type. Missing types → not tracked."""
+    if not item_type:
+        return None
+    return DEFAULT_WASH_INTERVALS.get(item_type)
 
 
 class ItemTags(BaseModel):
@@ -106,6 +124,7 @@ class ItemResponse(ItemBase):
     season: list[str] = Field(default_factory=list)
     status: str
     ai_processed: bool = False
+    ai_catalog_cutout: bool = False
     ai_confidence: Decimal | None = None
     ai_description: str | None = None
     tagging_status: str = "pending"
@@ -151,7 +170,7 @@ class ItemResponse(ItemBase):
     def effective_wash_interval(self) -> int | None:
         if self.wash_interval is not None:
             return self.wash_interval
-        return DEFAULT_WASH_INTERVALS.get(self.type, 3)
+        return default_wash_interval(self.type)
 
 
 class ItemAssistantResponse(BaseModel):

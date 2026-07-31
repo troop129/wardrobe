@@ -12,6 +12,7 @@ function makeItem(overrides: Partial<Item> & { type: string; id: string }): Item
     colors: [],
     status: 'ready',
     ai_processed: true,
+    ai_catalog_cutout: false,
     tagging_status: 'tagged',
     wear_count: 0,
     suggestion_count: 0,

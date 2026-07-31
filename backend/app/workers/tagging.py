@@ -9,6 +9,8 @@ from sqlalchemy import select, update
 from app.config import get_settings
 from app.models.item import ClothingItem, ItemStatus, TaggedBy, TaggingStatus
 from app.services.ai_service import AIService, ClothingTags
+from app.utils.clothing import normalize_type
+from app.utils.item_naming import resolve_item_name
 from app.workers.db import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,17 @@ def tags_to_item_fields(tags: ClothingTags, raw_response: str | None = None) -> 
     if tags.logprobs_confidence is not None:
         tags_jsonb["logprobs_confidence"] = tags.logprobs_confidence
 
+    resolved_name = resolve_item_name(
+        preferred=tags.name,
+        brand=tags.brand,
+        primary_color=tags.primary_color,
+        fit=tags.fit,
+        item_type=tags.type,
+        subtype=tags.subtype,
+    )
+
     fields = {
-        "type": tags.type,
+        "type": normalize_type(tags.type) or tags.type,
         "subtype": tags.subtype,
         "primary_color": tags.primary_color,
         "colors": tags.colors,
@@ -52,6 +63,10 @@ def tags_to_item_fields(tags: ClothingTags, raw_response: str | None = None) -> 
         "tagged_by": TaggedBy.auto,
         "tagged_at": datetime.now(UTC),
     }
+    if tags.brand:
+        fields["brand"] = tags.brand
+    if resolved_name:
+        fields["name"] = resolved_name
     if raw_response:
         fields["ai_raw_response"] = {"raw_text": raw_response}
     return fields
@@ -194,6 +209,9 @@ async def tag_item_image(ctx: dict, item_id: str, image_path: str) -> dict[str, 
                         setattr(item, field, value)
                 elif field == "primary_color":
                     if not item.primary_color or item.primary_color == "unknown":
+                        setattr(item, field, value)
+                elif field in ("name", "brand"):
+                    if not getattr(item, field, None):
                         setattr(item, field, value)
                 else:
                     # For other fields (colors, pattern, material, style, etc.), only set if not already set

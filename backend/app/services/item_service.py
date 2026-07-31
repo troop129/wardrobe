@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes, selectinload
 
 from app.models.item import ClothingItem, ItemHistory, ItemStatus, TaggingStatus, WashHistory
-from app.schemas.item import DEFAULT_WASH_INTERVALS, ItemCreate, ItemFilter, ItemUpdate
+from app.schemas.item import ItemCreate, ItemFilter, ItemUpdate, default_wash_interval
 from app.utils.clothing import normalize_color, normalize_type
 
 
@@ -312,9 +312,7 @@ class ItemService:
         # Update wash tracking
         item.wears_since_wash += 1
         effective_interval = (
-            item.wash_interval
-            if item.wash_interval is not None
-            else DEFAULT_WASH_INTERVALS.get(item.type, 3)
+            item.wash_interval if item.wash_interval is not None else default_wash_interval(item.type)
         )
         item.needs_wash = (
             item.wears_since_wash >= effective_interval if effective_interval is not None else False

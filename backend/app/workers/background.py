@@ -120,6 +120,7 @@ async def ai_catalog_cutout_job(ctx: dict, item_id: str, image_path: str) -> dic
         item.medium_path = processed["medium_path"]
         item.thumbnail_path = processed["thumbnail_path"]
         item.original_image_path = processed["original_backup_path"]
+        item.ai_catalog_cutout = True
         await db.commit()
         logger.info(f"AI catalog cutout completed for item {item_id}")
         return {"status": "success", "item_id": item_id}

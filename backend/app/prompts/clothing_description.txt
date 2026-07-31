@@ -1,1 +1,8 @@
-Describe this clothing item in one short sentence. Focus only on the main garment - mention its type, color, and any notable features. Keep it under 20 words.
+Describe the main item in this image in one short sentence (under 20 words).
+
+- Clothing: type, color, and notable features (collar, print, silhouette).
+- Shoes/sneakers: style, color, and any visible model cues.
+- Cologne/perfume: brand and product name if readable on the bottle; otherwise bottle color/shape. Do not call it a garment.
+- Other accessories: what it is and its color.
+
+Focus only on the main item. Preserve proper names and brand casing when visible.
