@@ -65,6 +65,17 @@ class ItemTags(BaseModel):
     season: list[str] = Field(default_factory=list)
     formality: str | None = None
     fit: str | None = None
+    occasion: list[str] = Field(default_factory=list)
+    brand: str | None = None
+    condition: str | None = None
+    features: list[str] = Field(default_factory=list)
+    care_preferences: str | list[str] | None = None
+    pairing_preferences: str | list[str] | None = None
+    fragrance_family: str | None = Field(None, max_length=50)
+    scent_notes: list[str] = Field(default_factory=list, max_length=12)
+    concentration: str | None = Field(None, max_length=50)
+    longevity: str | None = Field(None, max_length=50)
+    sillage: str | None = Field(None, max_length=50)
 
 
 class ItemBase(BaseModel):
@@ -96,7 +107,7 @@ class ItemUpdate(BaseModel):
     tags: ItemTags | None = None
     colors: list[str] | None = None
     primary_color: str | None = None
-    wash_interval: int | None = None
+    wash_interval: int | None = Field(None, ge=1, le=100)
 
 
 class ItemAssistantRequest(BaseModel):
@@ -190,6 +201,7 @@ class ItemListResponse(BaseModel):
 class ItemFilter(BaseModel):
     type: str | None = None
     subtype: str | None = None
+    brand: str | None = None
     colors: list[str] | None = None
     status: str | None = None
     tagging_status: str | None = None

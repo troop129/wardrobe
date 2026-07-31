@@ -14,6 +14,13 @@ export interface ItemTags {
   condition?: string;
   features?: string[];
   logprobs_confidence?: number;
+  fragrance_family?: string;
+  scent_notes?: string[];
+  concentration?: string;
+  longevity?: string;
+  sillage?: string;
+  care_preferences?: string | string[];
+  pairing_preferences?: string | string[];
 }
 
 export interface Item {
@@ -74,6 +81,7 @@ export interface ItemListResponse {
 export interface ItemFilter {
   type?: string;
   subtype?: string;
+  brand?: string;
   colors?: string[];
   status?: string;
   favorite?: boolean;
@@ -270,8 +278,10 @@ export interface OutfitItem {
   type: string;
   subtype?: string;
   name?: string;
+  brand?: string;
   primary_color?: string;
   colors: string[];
+  tags?: ItemTags;
   image_path: string;
   thumbnail_path?: string;
   image_url?: string;
@@ -316,6 +326,7 @@ export interface Outfit {
 
 export interface SuggestRequest {
   occasion: string;
+  strategy?: 'rules' | 'ai';
   weather_override?: {
     temperature: number;
     feels_like?: number;

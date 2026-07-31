@@ -103,10 +103,15 @@ class LearningService:
         if not outfit or not outfit.feedback:
             return
 
+        performance_result = await self.db.execute(
+            select(OutfitPerformance.outfit_id).where(OutfitPerformance.outfit_id == outfit_id)
+        )
+        was_processed = performance_result.scalar_one_or_none() is not None
+
         await self._update_outfit_performance(outfit)
 
         signal_types = self._determine_signal_types(outfit.feedback)
-        if signal_types:
+        if signal_types and not was_processed:
             await self._update_item_pair_scores(outfit, signal_types)
 
         await self.db.commit()
@@ -122,7 +127,13 @@ class LearningService:
         outfit = result.scalar_one()
 
         signal = self._get_outfit_signal(outfit)
-        await self._update_profile_incremental(user_id, outfit, signal)
+        if was_processed:
+            # Feedback can be edited. Replaying the incremental update would
+            # double-count both the profile and item-pair evidence, so rebuild
+            # the small per-user profile deterministically on subsequent passes.
+            await self.recompute_learning_profile(user_id)
+        else:
+            await self._update_profile_incremental(user_id, outfit, signal)
 
     async def _update_outfit_performance(self, outfit: Outfit) -> None:
         """Compute and store outfit performance metrics."""
@@ -434,6 +445,53 @@ class LearningService:
             await self._apply_pair_delta(outfit, pair, signal_types, feedback, sign=+1)
 
         await self.db.flush()
+
+    async def record_explicit_pair_preferences(
+        self,
+        outfit: Outfit,
+        item_ids: list[UUID] | None = None,
+    ) -> int:
+        """Record a deliberate "keep these together" preference once per pair.
+
+        The marker lives in the pair's JSON context, so tapping the control again
+        is idempotent and does not inflate evidence. Explicit preferences receive
+        enough evidence to participate in deterministic composition immediately.
+        """
+        allowed_ids = set(item_ids) if item_ids else {oi.item_id for oi in outfit.items}
+        selected_ids = [oi.item_id for oi in outfit.items if oi.item_id in allowed_ids]
+        saved = 0
+        for left, right in combinations(selected_ids, 2):
+            lo, hi = sorted((left, right))
+            result = await self.db.execute(
+                select(ItemPairScore).where(
+                    and_(
+                        ItemPairScore.user_id == outfit.user_id,
+                        ItemPairScore.item1_id == lo,
+                        ItemPairScore.item2_id == hi,
+                    )
+                )
+            )
+            pair = result.scalar_one_or_none()
+            if pair is None:
+                pair = ItemPairScore(user_id=outfit.user_id, item1_id=lo, item2_id=hi)
+                self.db.add(pair)
+                await self.db.flush()
+
+            context = dict(pair.occasion_performance or {})
+            if context.get("_explicit_preference") is True:
+                continue
+            context["_explicit_preference"] = True
+            context.setdefault(outfit.occasion, {"count": 1, "positive": 1})
+            pair.occasion_performance = context
+            pair.times_paired = (pair.times_paired or 0) + self.MIN_PAIRS_FOR_SCORING
+            pair.times_accepted = (pair.times_accepted or 0) + self.MIN_PAIRS_FOR_SCORING
+            pair.total_rating_sum = (pair.total_rating_sum or 0) + 5
+            pair.rating_count = (pair.rating_count or 0) + 1
+            pair.compatibility_score = self._compute_pair_compatibility(pair)
+            saved += 1
+
+        await self.db.commit()
+        return saved
 
     async def _apply_pair_delta(
         self,

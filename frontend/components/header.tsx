@@ -1,11 +1,13 @@
 'use client';
 
 import { Menu, Moon, Sun, LogOut } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { signOut } from 'next-auth/react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/hooks/use-auth';
+import { getDashboardRouteTitle } from '@/lib/navigation';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -14,6 +16,8 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
+  const routeTitle = getDashboardRouteTitle(pathname);
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -47,7 +51,9 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="h-6 w-px bg-border/70 lg:hidden" aria-hidden="true" />
 
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="flex flex-1" />
+        <div className="flex min-w-0 flex-1 items-center">
+          <span className="truncate text-sm font-medium lg:hidden">{routeTitle}</span>
+        </div>
         <div className="flex items-center gap-x-4 lg:gap-x-6">
           <Button
             variant="ghost"

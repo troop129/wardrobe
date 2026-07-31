@@ -5,6 +5,7 @@ CONTEXT:
 - Time of day: {time_of_day}
 - Weather: {temperature}°C (feels like {feels_like}°C), {condition}, {precipitation_chance}% chance of rain
 - Items are pre-ranked by suitability. Higher-numbered items are less compatible — prefer items near the top of the list.
+- The list contains only indexed, ready, clean items. The physical closet may still be partially indexed; never claim that unlisted clothes do not exist.
 {preferences_text}
 
 STYLING PRINCIPLES:

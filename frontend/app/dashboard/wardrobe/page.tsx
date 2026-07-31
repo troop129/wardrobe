@@ -18,7 +18,7 @@ import { AddItemDialog } from '@/components/add-item-dialog';
 import { ItemDetailDialog } from '@/components/item-detail-dialog';
 import { ItemCard, ItemCardSkeleton } from '@/components/item-card';
 import { BulkActionToolbar, BulkSelection } from '@/components/bulk-action-toolbar';
-import { useItems, useItem, useItemTypes, useReanalyzeItem, useCancelAnalysis, useBulkDeleteItems, useBulkReanalyzeItems, useBulkRemoveBackgroundItems, BulkOperationParams } from '@/lib/hooks/use-items';
+import { useItems, useItem, useItemTypes, useBrands, useReanalyzeItem, useCancelAnalysis, useBulkDeleteItems, useBulkReanalyzeItems, useBulkRemoveBackgroundItems, BulkOperationParams } from '@/lib/hooks/use-items';
 import { useUserProfile } from '@/lib/hooks/use-user';
 import { useFeatures } from '@/lib/hooks/use-features';
 import { CLOTHING_TYPES } from '@/lib/types';
@@ -70,6 +70,7 @@ export default function WardrobePage() {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>(() => searchParams.get('type') ?? 'all');
+  const [brandFilter, setBrandFilter] = useState<string>(() => searchParams.get('brand') ?? 'all');
   const [sortIndex, setSortIndex] = useState(() => {
     const raw = Number(searchParams.get('sort'));
     return Number.isInteger(raw) && raw >= 0 && raw < SORT_OPTIONS.length ? raw : 0;
@@ -124,6 +125,7 @@ export default function WardrobePage() {
 
     if (search) params.set('search', search); else params.delete('search');
     if (typeFilter !== 'all') params.set('type', typeFilter); else params.delete('type');
+    if (brandFilter !== 'all') params.set('brand', brandFilter); else params.delete('brand');
     if (sortIndex !== 0) params.set('sort', String(sortIndex)); else params.delete('sort');
     if (needsWash) params.set('needsWash', 'true'); else params.delete('needsWash');
     if (favoriteFilter) params.set('favorite', 'true'); else params.delete('favorite');
@@ -134,13 +136,14 @@ export default function WardrobePage() {
     if (next !== searchParams.toString()) {
       router.replace(next ? `/dashboard/wardrobe?${next}` : '/dashboard/wardrobe', { scroll: false });
     }
-  }, [search, typeFilter, sortIndex, needsWash, favoriteFilter, page, pageSize, searchParams, router]);
+  }, [search, typeFilter, brandFilter, sortIndex, needsWash, favoriteFilter, page, pageSize, searchParams, router]);
 
   const sortOption = SORT_OPTIONS[sortIndex];
 
   const filters = {
     search: search || undefined,
     type: typeFilter !== 'all' ? typeFilter : undefined,
+    brand: brandFilter !== 'all' ? brandFilter : undefined,
     needs_wash: needsWash,
     favorite: favoriteFilter,
     is_archived: false,
@@ -152,11 +155,13 @@ export default function WardrobePage() {
     needsWash !== undefined,
     favoriteFilter !== undefined,
     typeFilter !== 'all',
+    brandFilter !== 'all',
   ].filter(Boolean).length;
 
   // Fetch items with automatic polling (faster when items are processing)
   const { data, isLoading, error } = useItems(filters, page, pageSize);
   const { data: itemTypes } = useItemTypes();
+  const { data: brands } = useBrands();
   const { data: features } = useFeatures();
   const reanalyze = useReanalyzeItem();
   const cancelAnalysis = useCancelAnalysis();
@@ -186,7 +191,7 @@ export default function WardrobePage() {
   // Clear selection when filters change (but not page - allow cross-page selection)
   useEffect(() => {
     setSelection({ mode: 'none', selectedIds: new Set(), excludedIds: new Set() });
-  }, [search, typeFilter, needsWash, favoriteFilter, sortIndex]);
+  }, [search, typeFilter, brandFilter, needsWash, favoriteFilter, sortIndex]);
 
   // Soft progress for bulk cleanup / re-analyze while the queue request is in flight
   // and while items remain processing.
@@ -487,6 +492,23 @@ export default function WardrobePage() {
         {showFilters && (
           <div className="flex flex-wrap gap-2 items-center p-3 border bg-muted/30">
             <Select
+              value={brandFilter}
+              onValueChange={(value) => {
+                setBrandFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue placeholder="All brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All brands</SelectItem>
+                {brands?.map(({ brand, count }) => (
+                  <SelectItem key={brand} value={brand}>{brand} ({count})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
               value={String(pageSize)}
               onValueChange={(value) => {
                 setPageSize(Number(value));
@@ -538,6 +560,7 @@ export default function WardrobePage() {
                 className="h-8 text-xs gap-1 ml-auto"
                 onClick={() => {
                   setTypeFilter('all');
+                  setBrandFilter('all');
                   setNeedsWash(undefined);
                   setFavoriteFilter(undefined);
                   setPage(1);

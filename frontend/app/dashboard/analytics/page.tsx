@@ -223,7 +223,7 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground">Your wardrobe insights and statistics</p>
+        <p className="text-muted-foreground">Based on indexed items and recorded wears</p>
       </div>
 
       {/* Stats Cards */}
@@ -242,8 +242,8 @@ export default function AnalyticsPage() {
         />
         <StatCard
           title="Acceptance Rate"
-          value={wardrobe.acceptance_rate ? `${wardrobe.acceptance_rate}%` : '-'}
-          description={wardrobe.acceptance_rate ? 'of suggestions accepted' : 'No data yet'}
+          value={wardrobe.acceptance_rate != null ? `${wardrobe.acceptance_rate}%` : '-'}
+          description={wardrobe.acceptance_rate != null ? 'of suggestions accepted' : 'No data yet'}
           icon={TrendingUp}
           trend={wardrobe.acceptance_rate && wardrobe.acceptance_rate > 50 ? 'up' : undefined}
         />

@@ -98,6 +98,18 @@ async def get_analytics(
         func.sum(case((ClothingItem.status == ItemStatus.archived, 1), else_=0)).label("archived"),
         func.sum(case((ClothingItem.status == ItemStatus.error, 1), else_=0)).label("error"),
         func.sum(ClothingItem.wear_count).label("total_wears"),
+        func.sum(
+            case(
+                (
+                    and_(
+                        ClothingItem.status == ItemStatus.ready,
+                        ClothingItem.wear_count == 0,
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("never_worn"),
     ).where(ClothingItem.user_id == current_user.id)
 
     items_result = await db.execute(items_query)
@@ -111,6 +123,7 @@ async def get_analytics(
         "error": items_row.error or 0,
     }
     total_wears = items_row.total_wears or 0
+    never_worn_count = items_row.never_worn or 0
 
     # Outfit stats
     outfits_query = select(
@@ -149,7 +162,7 @@ async def get_analytics(
         total_outfits=total_outfits,
         outfits_this_week=outfits_this_week,
         outfits_this_month=outfits_this_month,
-        acceptance_rate=round(acceptance_rate, 1) if acceptance_rate else None,
+        acceptance_rate=round(acceptance_rate, 1) if acceptance_rate is not None else None,
         average_rating=average_rating,
         total_wears=total_wears,
     )
@@ -321,9 +334,10 @@ async def get_analytics(
         insights.append("Start by adding some items to your wardrobe!")
     else:
         # Wardrobe insights
-        if len(never_worn) > 0:
+        if never_worn_count > 0:
             insights.append(
-                f"You have {len(never_worn)} items you've never worn. Consider styling them!"
+                f"You have {never_worn_count} indexed items you've never recorded wearing. "
+                "Try building a look around one of them!"
             )
 
         # Color insights

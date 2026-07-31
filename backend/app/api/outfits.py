@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.database import get_db
-from app.models.item import ClothingItem
+from app.models.item import ClothingItem, ItemStatus
 from app.models.outfit import (
     FamilyOutfitRating,
     Outfit,
@@ -39,6 +39,7 @@ from app.services.studio_service import (
 from app.services.suggestion_cache import clear_suggestions
 from app.services.weather_service import WeatherData
 from app.utils.auth import get_current_user
+from app.utils.clothing import ITEM_ROLE
 from app.utils.rate_limit import rate_limit_by_user
 from app.utils.signed_urls import sign_image_url
 
@@ -110,6 +111,7 @@ class SuggestRequest(BaseModel):
     weather_override: WeatherOverrideRequest | None = None
     exclude_items: list[UUID] = Field(default_factory=list, description="Items to exclude")
     include_items: list[UUID] = Field(default_factory=list, description="Items to include")
+    strategy: Literal["rules", "ai"] = "rules"
 
 
 class OutfitItemResponse(BaseModel):
@@ -117,8 +119,10 @@ class OutfitItemResponse(BaseModel):
     type: str
     subtype: str | None = None
     name: str | None = None
+    brand: str | None = None
     primary_color: str | None = None
     colors: list[str] = []
+    tags: dict = Field(default_factory=dict)
     image_path: str | None = None
     thumbnail_path: str | None = None
     layer_type: str | None = None
@@ -342,8 +346,10 @@ def outfit_to_response(
                 type=item.type,
                 subtype=item.subtype,
                 name=item.name,
+                brand=item.brand,
                 primary_color=item.primary_color,
                 colors=item.colors or [],
+                tags=item.tags or {},
                 image_path=item.image_path,
                 thumbnail_path=item.thumbnail_path,
                 layer_type=outfit_item.layer_type,
@@ -415,6 +421,62 @@ def outfit_to_response(
     )
 
 
+async def _record_outfit_intent(
+    db: AsyncSession,
+    outfit: Outfit,
+    *,
+    accepted: bool,
+) -> None:
+    """Persist the lightweight accept/reject signal used by the main UI.
+
+    Historically these endpoints only changed ``Outfit.status``. That meant the
+    most common user actions never reached the learning profile, while the much
+    less common detailed feedback dialog did. Keep intent separate from "worn"
+    (accepting a morning suggestion is not proof it was worn), but make it a real,
+    idempotent feedback signal.
+    """
+    previous = outfit.feedback.accepted if outfit.feedback else None
+    changed = previous != accepted or outfit.status != (
+        OutfitStatus.accepted if accepted else OutfitStatus.rejected
+    )
+    if outfit.feedback is None:
+        outfit.feedback = UserFeedback(outfit_id=outfit.id)
+        db.add(outfit.feedback)
+
+    outfit.feedback.accepted = accepted
+    outfit.status = OutfitStatus.accepted if accepted else OutfitStatus.rejected
+    outfit.responded_at = datetime.now(UTC)
+
+    _apply_acceptance_count_delta(outfit, previous, accepted)
+
+    await db.commit()
+
+    # A full profile recomputation is deterministic and safe if a tablet retries
+    # a request. The incremental pair-learning path is reserved for richer
+    # rating/wear feedback, where it already captures additional signal types.
+    if changed:
+        try:
+            await LearningService(db).recompute_learning_profile(outfit.user_id)
+        except Exception as e:
+            logger.exception("Learning recompute failed for outfit %s: %s", outfit.id, e)
+
+
+def _apply_acceptance_count_delta(
+    outfit: Outfit,
+    previous: bool | None,
+    accepted: bool,
+) -> None:
+    """Keep per-item acceptance counters correct across retries and edits."""
+    if previous == accepted:
+        return
+    delta = (1 if accepted else 0) - (1 if previous is True else 0)
+    if not delta:
+        return
+    for outfit_item in outfit.items:
+        current = outfit_item.item.acceptance_count or 0
+        outfit_item.item.acceptance_count = max(0, current + delta)
+
+
 @router.post("/suggest", response_model=OutfitResponse)
 async def suggest_outfit(
     request: SuggestRequest,
@@ -456,6 +518,7 @@ async def suggest_outfit(
             exclude_items=request.exclude_items,
             include_items=request.include_items,
             time_of_day=request.time_of_day,
+            strategy=request.strategy,
         )
     except InsufficientWardrobeError as e:
         raise HTTPException(
@@ -659,10 +722,7 @@ async def accept_outfit(
             detail={"message": "Outfit not found", "error_code": "OUTFIT_NOT_FOUND"},
         )
 
-    outfit.status = OutfitStatus.accepted
-    outfit.responded_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(outfit)
+    await _record_outfit_intent(db, outfit, accepted=True)
 
     return outfit_to_response(
         outfit, await fetch_wore_instead_items_map(db, [outfit], user_id=current_user.id)
@@ -694,12 +754,7 @@ async def reject_outfit(
             detail={"message": "Outfit not found", "error_code": "OUTFIT_NOT_FOUND"},
         )
 
-    outfit.status = OutfitStatus.rejected
-    outfit.responded_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(outfit)
-
-    await clear_suggestions(current_user.id, outfit.occasion)
+    await _record_outfit_intent(db, outfit, accepted=False)
 
     return outfit_to_response(
         outfit, await fetch_wore_instead_items_map(db, [outfit], user_id=current_user.id)
@@ -714,9 +769,267 @@ async def skip_outfit(
 ) -> OutfitResponse:
     service = OutfitService(db)
     outfit = await service.set_status(outfit_id, current_user.id, OutfitStatus.skipped)
-    await clear_suggestions(current_user.id, outfit.occasion)
     return outfit_to_response(
         outfit, await fetch_wore_instead_items_map(db, [outfit], user_id=current_user.id)
+    )
+
+
+class KeepTogetherResponse(BaseModel):
+    saved_pairs: int
+    message: str
+
+
+@router.post("/{outfit_id}/keep-together", response_model=KeepTogetherResponse)
+async def keep_outfit_together(
+    outfit_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> KeepTogetherResponse:
+    result = await db.execute(
+        select(Outfit)
+        .where(and_(Outfit.id == outfit_id, Outfit.user_id == current_user.id))
+        .options(selectinload(Outfit.items).selectinload(OutfitItem.item))
+    )
+    outfit = result.scalar_one_or_none()
+    if outfit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outfit not found")
+    saved = await LearningService(db).record_explicit_pair_preferences(outfit)
+    if saved:
+        await clear_suggestions(current_user.id, outfit.occasion)
+    return KeepTogetherResponse(
+        saved_pairs=saved,
+        message=(
+            f"Saved {saved} new keep-together pair{'s' if saved != 1 else ''}."
+            if saved
+            else "This combination was already saved."
+        ),
+    )
+
+
+class RefineOutfitRequest(BaseModel):
+    message: str = Field(min_length=2, max_length=500)
+
+
+class RefineOutfitResponse(BaseModel):
+    outfit: OutfitResponse
+    reply: str
+    saved_pairs: int = 0
+
+
+_REFINE_ROLE_ALIASES = {
+    "shirt": "base_top",
+    "top": "base_top",
+    "tee": "base_top",
+    "pants": "bottom",
+    "pant": "bottom",
+    "jeans": "bottom",
+    "bottom": "bottom",
+    "shoes": "footwear",
+    "shoe": "footwear",
+    "sneakers": "footwear",
+    "footwear": "footwear",
+    "jacket": "outer_layer",
+    "coat": "outer_layer",
+    "layer": "outer_layer",
+}
+
+
+def _mentioned_refinement_items(message: str, items: list[ClothingItem]) -> list[ClothingItem]:
+    mentioned = []
+    for item in items:
+        name = (item.name or "").lower()
+        brand = (item.brand or "").lower()
+        color = (item.primary_color or "").lower()
+        item_type = (item.type or "").lower()
+        subtype = (item.subtype or "").lower()
+        named = len(name) >= 3 and name in message
+        described = bool(color and color in message) and any(
+            value and value in message for value in (item_type, subtype)
+        )
+        branded = (
+            len(brand) >= 2
+            and brand in message
+            and any(value and value in message for value in (item_type, subtype, name))
+        )
+        if named or described or branded:
+            mentioned.append(item)
+    return mentioned
+
+
+def _replace_role(
+    item_ids: list[UUID], items_by_id: dict[UUID, ClothingItem], replacement: ClothingItem
+):
+    replacement_role = ITEM_ROLE.get((replacement.type or "").lower())
+    if replacement.type == "cologne":
+        return [item_id for item_id in item_ids if items_by_id[item_id].type != "cologne"] + [
+            replacement.id
+        ]
+    if replacement_role is None or replacement_role == "accessory":
+        return item_ids if replacement.id in item_ids else [*item_ids, replacement.id]
+    conflicting_roles = {replacement_role}
+    if replacement_role == "full_body":
+        conflicting_roles.update({"base_top", "bottom"})
+    elif replacement_role in {"base_top", "bottom"}:
+        conflicting_roles.add("full_body")
+    return [
+        item_id
+        for item_id in item_ids
+        if ITEM_ROLE.get((items_by_id[item_id].type or "").lower()) not in conflicting_roles
+    ] + [replacement.id]
+
+
+@router.post("/{outfit_id}/refine", response_model=RefineOutfitResponse)
+async def refine_outfit(
+    outfit_id: UUID,
+    request: RefineOutfitRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RefineOutfitResponse:
+    """Apply common natural-language outfit edits locally, without an LLM call."""
+    result = await db.execute(
+        select(Outfit)
+        .where(and_(Outfit.id == outfit_id, Outfit.user_id == current_user.id))
+        .options(selectinload(Outfit.items).selectinload(OutfitItem.item))
+    )
+    outfit = result.scalar_one_or_none()
+    if outfit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outfit not found")
+
+    candidates_result = await db.execute(
+        select(ClothingItem).where(
+            and_(
+                ClothingItem.user_id == current_user.id,
+                ClothingItem.status == ItemStatus.ready,
+                ClothingItem.is_archived.is_(False),
+                ClothingItem.needs_wash.is_(False),
+            )
+        )
+    )
+    candidates = list(candidates_result.scalars().all())
+    items_by_id = {item.id: item for item in candidates}
+    for outfit_item in outfit.items:
+        items_by_id[outfit_item.item_id] = outfit_item.item
+
+    message = request.message.lower().strip()
+    item_ids = [oi.item_id for oi in sorted(outfit.items, key=lambda oi: oi.position)]
+    original_ids = list(item_ids)
+    mentioned = _mentioned_refinement_items(message, candidates)
+
+    remove_layers = any(
+        phrase in message
+        for phrase in ("no layer", "remove layer", "fewer layer", "less layer", "too hot")
+    )
+    if remove_layers:
+        item_ids = [
+            item_id
+            for item_id in item_ids
+            if ITEM_ROLE.get((items_by_id[item_id].type or "").lower())
+            not in {"mid_layer", "outer_layer"}
+        ]
+    if any(
+        phrase in message
+        for phrase in ("no cologne", "no fragrance", "remove cologne", "remove fragrance")
+    ):
+        item_ids = [item_id for item_id in item_ids if items_by_id[item_id].type != "cologne"]
+
+    # Concrete color/name/brand mentions take priority and make recognition useful
+    # in ordinary language such as "use the blue Nike jacket".
+    for item in mentioned:
+        item_ids = _replace_role(item_ids, items_by_id, item)
+
+    good_pairs = await RecommendationService(db)._get_good_item_pairs(current_user.id)
+    current_set = set(item_ids)
+
+    def best_for_role(role: str, *, cologne: bool = False) -> ClothingItem | None:
+        pool = [
+            item
+            for item in candidates
+            if item.id not in current_set
+            and (
+                item.type == "cologne"
+                if cologne
+                else ITEM_ROLE.get((item.type or "").lower()) == role
+            )
+        ]
+        if not pool:
+            return None
+        return max(
+            pool,
+            key=lambda item: (
+                sum(partner in current_set for partner in good_pairs.get(item.id, [])),
+                item.favorite,
+                item.acceptance_count or 0,
+                -(item.suggestion_count or 0),
+            ),
+        )
+
+    if any(phrase in message for phrase in ("add a layer", "add layer", "more layer")):
+        present_roles = {
+            ITEM_ROLE.get((items_by_id[item_id].type or "").lower()) for item_id in item_ids
+        }
+        if "outer_layer" in present_roles:
+            layer = best_for_role("mid_layer")
+        elif "mid_layer" in present_roles:
+            layer = best_for_role("outer_layer")
+        else:
+            layer = best_for_role("outer_layer") or best_for_role("mid_layer")
+        if layer:
+            item_ids = _replace_role(item_ids, items_by_id, layer)
+            current_set = set(item_ids)
+    if any(phrase in message for phrase in ("add cologne", "add fragrance", "add a scent")):
+        fragrance = best_for_role("accessory", cologne=True)
+        if fragrance:
+            item_ids = _replace_role(item_ids, items_by_id, fragrance)
+            current_set = set(item_ids)
+
+    for alias, role in _REFINE_ROLE_ALIASES.items():
+        if f"different {alias}" in message or f"another {alias}" in message:
+            replacement = best_for_role(role)
+            if replacement:
+                item_ids = _replace_role(item_ids, items_by_id, replacement)
+                current_set = set(item_ids)
+            break
+
+    changed = item_ids != original_ids
+    service = StudioService(db)
+    if changed:
+        updated = await service.patch_outfit(
+            user=current_user,
+            outfit_id=outfit.id,
+            name=None,
+            items=item_ids,
+        )
+        await db.commit()
+    else:
+        updated = outfit
+
+    saved_pairs = 0
+    wants_together = any(
+        phrase in message for phrase in ("together", "i like", "would wear", "save this combo")
+    )
+    if wants_together:
+        pair_ids = [item.id for item in mentioned] if len(mentioned) >= 2 else None
+        full_updated = await service.get_full_outfit(updated.id)
+        saved_pairs = await LearningService(db).record_explicit_pair_preferences(
+            full_updated, pair_ids
+        )
+        updated = full_updated
+
+    await clear_suggestions(current_user.id, outfit.occasion)
+    full = await service.get_full_outfit(updated.id)
+    if changed and saved_pairs:
+        reply = f"Updated the outfit and saved {saved_pairs} keep-together pairs."
+    elif changed:
+        reply = "Updated the outfit using your available clean items."
+    elif saved_pairs:
+        reply = f"Saved {saved_pairs} keep-together pairs for future suggestions."
+    else:
+        reply = (
+            "I could not map that to an item yet. Try ‘different shoes’, ‘add a layer’, "
+            "‘no cologne’, or name a color, brand, and item type."
+        )
+    return RefineOutfitResponse(
+        outfit=outfit_to_response(full), reply=reply, saved_pairs=saved_pairs
     )
 
 
@@ -769,7 +1082,9 @@ async def submit_feedback(
         outfit.feedback = feedback
         db.add(feedback)
 
+    previous_accepted = feedback.accepted
     if request.accepted is not None:
+        _apply_acceptance_count_delta(outfit, previous_accepted, request.accepted)
         feedback.accepted = request.accepted
         outfit.status = OutfitStatus.accepted if request.accepted else OutfitStatus.rejected
         outfit.responded_at = datetime.utcnow()

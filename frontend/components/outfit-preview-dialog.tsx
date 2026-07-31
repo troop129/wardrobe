@@ -16,6 +16,7 @@ import { useRotateImage } from '@/lib/hooks/use-items';
 import { FamilyRatingForm, FamilyRatingsDisplay } from '@/components/family-ratings';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { parseDateString } from '@/lib/utils';
 
 interface OutfitPreviewDialogProps {
   outfit: Outfit;
@@ -72,7 +73,7 @@ export function OutfitPreviewDialog({ outfit, open, onClose, isOwner = true }: O
               {outfit.scheduled_for && (
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <CalendarDays className="h-3 w-3" />
-                  {new Date(outfit.scheduled_for + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {parseDateString(outfit.scheduled_for).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
               )}
               <span className="text-xs text-muted-foreground">

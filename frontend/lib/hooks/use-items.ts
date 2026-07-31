@@ -31,6 +31,7 @@ export function useItems(filters: ItemFilter = {}, page = 1, pageSize = 20) {
         page_size: String(pageSize),
       };
       if (filters.type) params.type = filters.type;
+      if (filters.brand) params.brand = filters.brand;
       if (filters.colors?.length) params.colors = filters.colors.join(',');
       if (filters.search) params.search = filters.search;
       if (filters.favorite !== undefined) params.favorite = String(filters.favorite);
@@ -649,6 +650,17 @@ export function useColorDistribution() {
   return useQuery({
     queryKey: ['color-distribution'],
     queryFn: () => api.get<Array<{ color: string; count: number }>>('/items/colors'),
+    enabled: status !== 'loading',
+  });
+}
+
+export function useBrands() {
+  const { status } = useSession();
+  useSetTokenIfAvailable();
+
+  return useQuery({
+    queryKey: ['item-brands'],
+    queryFn: () => api.get<Array<{ brand: string; count: number }>>('/items/brands'),
     enabled: status !== 'loading',
   });
 }

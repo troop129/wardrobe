@@ -98,6 +98,7 @@ class TestPromptTemplate:
         assert "Time of day" in prompt
         assert "Full day" in prompt
         assert "{time_of_day}" in prompt
+        assert "partially indexed" in prompt
 
     def test_prompt_format_accepts_time_of_day(self):
         from app.services.recommendation_service import RECOMMENDATION_PROMPT
@@ -292,6 +293,27 @@ class TestMultiOutfitParse:
         result = service._parse_multi_outfit_response(content)
         assert len(result) >= 1
         assert "items" in result[0]
+
+
+class TestOutfitCompleteness:
+    def test_complete_separates(self):
+        service = RecommendationService.__new__(RecommendationService)
+        types = {
+            uuid4(): "t-shirt",
+            uuid4(): "pants",
+            uuid4(): "sneakers",
+        }
+        assert service._missing_core_roles(types) == []
+
+    def test_complete_full_body(self):
+        service = RecommendationService.__new__(RecommendationService)
+        types = {uuid4(): "dress", uuid4(): "shoes"}
+        assert service._missing_core_roles(types) == []
+
+    def test_reports_missing_roles(self):
+        service = RecommendationService.__new__(RecommendationService)
+        types = {uuid4(): "shirt", uuid4(): "jacket"}
+        assert service._missing_core_roles(types) == ["bottom", "footwear"]
 
 
 class TestFormatItemsEnriched:

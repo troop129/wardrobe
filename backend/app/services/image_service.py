@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 import uuid
 from datetime import datetime
@@ -85,6 +86,20 @@ class ImageService:
         return output.getvalue()
 
     async def process_and_store(
+        self,
+        user_id: uuid.UUID,
+        image_data: bytes,
+        original_filename: str,
+    ) -> dict[str, str]:
+        """Process an upload without blocking FastAPI's event loop."""
+        return await asyncio.to_thread(
+            self._process_and_store_sync,
+            user_id,
+            image_data,
+            original_filename,
+        )
+
+    def _process_and_store_sync(
         self,
         user_id: uuid.UUID,
         image_data: bytes,

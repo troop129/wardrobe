@@ -97,8 +97,8 @@ async def _maybe_queue_background_removal(db: AsyncSession, item_id: UUID, image
 
     Commits the current request transaction before enqueueing so the worker can
     see the new row. Without that, rembg jobs race the request-end commit and
-    fail immediately with "Item not found" (tagging survives the same race only
-    because the OpenAI call takes long enough for get_db to commit first).
+    fail immediately with "Item not found". Tagging uses the same commit-before-
+    enqueue rule in the upload endpoints.
     """
     if not settings.auto_background_removal or not background_removal.is_available():
         return
@@ -133,6 +133,7 @@ async def list_items(
     page_size: int = Query(20, ge=1, le=100),
     type: str | None = None,
     subtype: str | None = None,
+    brand: str | None = None,
     colors: str | None = None,
     status: str | None = None,
     tagging_status: str | None = None,
@@ -148,6 +149,7 @@ async def list_items(
     filters = ItemFilter(
         type=type,
         subtype=subtype,
+        brand=brand,
         colors=color_list,
         status=status,
         tagging_status=tagging_status,
@@ -253,6 +255,11 @@ async def create_item(
         image_paths=image_paths,
     )
 
+    # Workers use independent database sessions. Make the row visible before
+    # enqueueing instead of relying on image analysis being slower than the
+    # request-end commit (which is especially fragile with fast local models).
+    await db.commit()
+
     do_auto_tag = settings.effective_ai_vision_enabled and not skip_ai
 
     if do_auto_tag:
@@ -274,6 +281,11 @@ async def create_item(
                 await redis.aclose()
         except Exception as e:
             logger.error(f"Failed to queue AI tagging job: {e}")
+            item.status = ItemStatus.error
+            item.ai_job_id = None
+            item.ai_raw_response = {"error": "Failed to queue AI analysis"}
+            await db.commit()
+            await db.refresh(item, attribute_names=["updated_at"])
     else:
         item = await item_service.mark_pending(item, set_ready=True)
 
@@ -371,6 +383,10 @@ async def bulk_create_items(
                     image_paths=image_paths,
                 )
 
+                # Commit each accepted upload before any worker can claim it.
+                # This also makes partial bulk success durable if a later file is bad.
+                await db.commit()
+
                 if not do_auto_tag:
                     item = await item_service.mark_pending(item, set_ready=True)
                 elif redis:
@@ -383,11 +399,22 @@ async def bulk_create_items(
                             _queue_name="arq:tagging",
                         )
                         item.ai_job_id = job.job_id
-                        await db.flush()
+                        await db.commit()
                         await db.refresh(item, attribute_names=["updated_at"])
                         logger.info(f"Queued AI tagging for bulk item {item.id}")
                     except Exception as e:
                         logger.error(f"Failed to queue AI tagging for {item.id}: {e}")
+                        item.status = ItemStatus.error
+                        item.ai_job_id = None
+                        item.ai_raw_response = {"error": "Failed to queue AI analysis"}
+                        await db.commit()
+                        await db.refresh(item, attribute_names=["updated_at"])
+                else:
+                    item.status = ItemStatus.error
+                    item.ai_job_id = None
+                    item.ai_raw_response = {"error": "AI job queue is unavailable"}
+                    await db.commit()
+                    await db.refresh(item, attribute_names=["updated_at"])
 
                 results.append(
                     BulkUploadResult(
@@ -678,6 +705,15 @@ async def get_color_distribution(
     return await item_service.get_color_distribution(current_user.id)
 
 
+@router.get("/brands")
+async def get_brands(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[dict]:
+    """Return recognized/manual brands with counts for filtering and review."""
+    return await ItemService(db).get_brand_distribution(current_user.id)
+
+
 @router.get("/{item_id}", response_model=ItemResponse)
 async def get_item(
     item_id: UUID,
@@ -753,7 +789,9 @@ async def apply_item_assistant(
         "do not title-case acronyms. For cologne/perfume use brand + product name; for shoes use brand + "
         "model/colorway when known; for clothing use brand + color + garment. "
         "Only include facts stated by the owner or already present. tags may use fit, material, pattern, style, "
-        "formality, season, features, care_preferences, pairing_preferences. Keep notes as a concise durable "
+        "formality, season, features, care_preferences, pairing_preferences, fragrance_family, scent_notes, "
+        "concentration, longevity, sillage. For fragrance, capture scent family and notes only when stated. "
+        "Keep notes as a concise durable "
         "reminder of personal preferences (not a chat transcript). Use null or [] when nothing should change."
     )
     try:
@@ -822,6 +860,11 @@ async def apply_item_assistant(
                 "care_preferences",
                 "pairing_preferences",
                 "occasion",
+                "fragrance_family",
+                "scent_notes",
+                "concentration",
+                "longevity",
+                "sillage",
             }
             and v not in (None, "", [], {})
         }
@@ -1234,7 +1277,7 @@ async def rotate_item_image(
     current_user: Annotated[User, Depends(get_current_user)],
     direction: str = Query(
         "cw",
-        regex="^(cw|ccw)$",
+        pattern="^(cw|ccw)$",
         description="Rotation direction: cw (clockwise) or ccw (counter-clockwise)",
     ),
 ) -> ItemResponse:

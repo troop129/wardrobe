@@ -73,6 +73,7 @@ import { Item, CLOTHING_TYPES, CLOTHING_COLORS } from '@/lib/types';
 import { ColorEyedropper } from '@/components/color-eyedropper';
 import { GeneratePairingsDialog } from '@/components/generate-pairings-dialog';
 import { useFeatures } from '@/lib/hooks/use-features';
+import { parseDateString } from '@/lib/utils';
 
 interface ItemDetailDialogProps {
   item: Item | null;
@@ -102,6 +103,11 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
     notes: '',
     favorite: false,
     wash_interval: undefined as number | undefined,
+    fragrance_family: '',
+    scent_notes: '',
+    concentration: '',
+    longevity: '',
+    sillage: '',
   });
   const [showWashHistory, setShowWashHistory] = useState(false);
   const [showWearHistory, setShowWearHistory] = useState(false);
@@ -161,6 +167,11 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
         notes: item.notes || '',
         favorite: item.favorite,
         wash_interval: item.wash_interval ?? undefined,
+        fragrance_family: item.tags?.fragrance_family || '',
+        scent_notes: item.tags?.scent_notes?.join(', ') || '',
+        concentration: item.tags?.concentration || '',
+        longevity: item.tags?.longevity || '',
+        sillage: item.tags?.sillage || '',
       });
       setIsEditing(false);
       setActiveImageIndex(0);
@@ -185,6 +196,17 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
           notes: editForm.notes || undefined,
           favorite: editForm.favorite,
           wash_interval: editForm.wash_interval,
+          tags: activeItem.type === 'cologne' ? {
+            ...(activeItem.tags || {}),
+            fragrance_family: editForm.fragrance_family || undefined,
+            scent_notes: editForm.scent_notes
+              .split(',')
+              .map((note) => note.trim().toLowerCase())
+              .filter(Boolean),
+            concentration: editForm.concentration || undefined,
+            longevity: editForm.longevity || undefined,
+            sillage: editForm.sillage || undefined,
+          } : undefined,
         },
       });
       setIsEditing(false);
@@ -416,7 +438,8 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
   const tags = item.tags || {};
   const hasAiTags = !!(tags.colors?.length || tags.pattern || tags.material ||
                    tags.style?.length || tags.season?.length || tags.formality || tags.fit ||
-                   tags.occasion?.length || tags.condition || tags.features?.length);
+                   tags.occasion?.length || tags.condition || tags.features?.length ||
+                   tags.fragrance_family || tags.scent_notes?.length || tags.concentration);
 
   return (
     <>
@@ -743,6 +766,58 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       placeholder="Brand name"
                     />
                   </div>
+                  {editForm.type === 'cologne' && (
+                    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                      <div>
+                        <p className="text-sm font-medium">Fragrance profile</p>
+                        <p className="text-xs text-muted-foreground">Used to match scent with weather and occasion.</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Family</Label>
+                          <Input
+                            value={editForm.fragrance_family}
+                            onChange={(e) => setEditForm({ ...editForm, fragrance_family: e.target.value })}
+                            placeholder="fresh, woody, amber…"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Concentration</Label>
+                          <Select
+                            value={editForm.concentration || 'unknown'}
+                            onValueChange={(value) => setEditForm({ ...editForm, concentration: value === 'unknown' ? '' : value })}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unknown">Not set</SelectItem>
+                              <SelectItem value="eau-de-toilette">Eau de toilette</SelectItem>
+                              <SelectItem value="eau-de-parfum">Eau de parfum</SelectItem>
+                              <SelectItem value="parfum">Parfum</SelectItem>
+                              <SelectItem value="extrait">Extrait</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Scent notes</Label>
+                        <Input
+                          value={editForm.scent_notes}
+                          onChange={(e) => setEditForm({ ...editForm, scent_notes: e.target.value })}
+                          placeholder="bergamot, cedar, vanilla"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Longevity</Label>
+                          <Input value={editForm.longevity} onChange={(e) => setEditForm({ ...editForm, longevity: e.target.value })} placeholder="moderate, long…" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Sillage</Label>
+                          <Input value={editForm.sillage} onChange={(e) => setEditForm({ ...editForm, sillage: e.target.value })} placeholder="intimate, moderate…" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Primary Color</Label>
                     <div className="flex gap-2">
@@ -857,13 +932,33 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                           Worn {item.wear_count} time{item.wear_count !== 1 ? 's' : ''}
                           {item.last_worn_at && (
                             <span className="text-muted-foreground">
-                              {' '}• Last: {new Date(item.last_worn_at).toLocaleDateString()}
+                              {' '}• Last: {parseDateString(item.last_worn_at).toLocaleDateString()}
                             </span>
                           )}
                         </span>
                       </div>
                     )}
                   </div>
+
+                  {/* Wash Status */}
+                  {item.type === 'cologne' && (
+                    <div className="space-y-2 rounded-lg border bg-primary/5 p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        Fragrance profile
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.fragrance_family && <Badge variant="secondary">{tags.fragrance_family}</Badge>}
+                        {tags.concentration && <Badge variant="outline">{tags.concentration.replaceAll('-', ' ')}</Badge>}
+                        {tags.longevity && <Badge variant="outline">{tags.longevity} longevity</Badge>}
+                        {tags.sillage && <Badge variant="outline">{tags.sillage} sillage</Badge>}
+                        {tags.scent_notes?.map((note) => <Badge key={note} variant="outline">{note}</Badge>)}
+                      </div>
+                      {!tags.fragrance_family && !tags.scent_notes?.length && (
+                        <p className="text-xs text-muted-foreground">Add scent family and notes to improve fragrance suggestions.</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Wash Status */}
                   {item.effective_wash_interval !== null && (
@@ -901,7 +996,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                       />
                       {item.last_washed_at && (
                         <p className="text-xs text-muted-foreground">
-                          Last washed: {new Date(item.last_washed_at).toLocaleDateString()}
+                          Last washed: {parseDateString(item.last_washed_at).toLocaleDateString()}
                         </p>
                       )}
                     </div>
@@ -916,7 +1011,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                         <CollapsibleContent className="mt-1.5 space-y-1">
                           {washHistory.map((wash) => (
                             <div key={wash.id} className="text-xs text-muted-foreground flex items-center gap-2">
-                              <span>{new Date(wash.washed_at).toLocaleDateString()}</span>
+                              <span>{parseDateString(wash.washed_at).toLocaleDateString()}</span>
                               {wash.method && <Badge variant="outline" className="text-[10px] h-4">{wash.method}</Badge>}
                               {wash.notes && <span className="truncate">{wash.notes}</span>}
                             </div>
@@ -994,7 +1089,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: ItemDetailDialogP
                             {wearHistory.map((entry) => (
                               <div key={entry.id} className="text-xs flex items-start gap-2">
                                 <span className="text-muted-foreground whitespace-nowrap">
-                                  {new Date(entry.worn_at).toLocaleDateString()}
+                                  {parseDateString(entry.worn_at).toLocaleDateString()}
                                 </span>
                                 {entry.occasion && (
                                   <Badge variant="outline" className="text-[10px] h-4">{entry.occasion}</Badge>

@@ -36,7 +36,7 @@ export function OutfitCalendar({
   onSelectDate,
   onMonthChange,
 }: OutfitCalendarProps) {
-  const currentMonth = new Date(year, month - 1, 1);
+  const currentMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
 
   // Build a map of date -> outfit sources for quick lookup
   const outfitsByDate = useMemo(() => {

@@ -57,6 +57,8 @@ class ItemService:
             query = query.where(ClothingItem.type == filters.type)
         if filters.subtype:
             query = query.where(ClothingItem.subtype == filters.subtype)
+        if filters.brand:
+            query = query.where(func.lower(ClothingItem.brand) == filters.brand.lower())
         if filters.status:
             query = query.where(ClothingItem.status == filters.status)
         if filters.tagging_status:
@@ -312,7 +314,9 @@ class ItemService:
         # Update wash tracking
         item.wears_since_wash += 1
         effective_interval = (
-            item.wash_interval if item.wash_interval is not None else default_wash_interval(item.type)
+            item.wash_interval
+            if item.wash_interval is not None
+            else default_wash_interval(item.type)
         )
         item.needs_wash = (
             item.wears_since_wash >= effective_interval if effective_interval is not None else False
@@ -458,3 +462,20 @@ class ItemService:
             .order_by(func.count().desc())
         )
         return [{"color": row.color, "count": row.count} for row in result.all()]
+
+    async def get_brand_distribution(self, user_id: UUID) -> list[dict]:
+        normalized = func.trim(ClothingItem.brand)
+        result = await self.db.execute(
+            select(normalized.label("brand"), func.count(ClothingItem.id).label("count"))
+            .where(
+                and_(
+                    ClothingItem.user_id == user_id,
+                    ClothingItem.is_archived.is_(False),
+                    ClothingItem.brand.is_not(None),
+                    normalized != "",
+                )
+            )
+            .group_by(normalized)
+            .order_by(func.count(ClothingItem.id).desc(), normalized.asc())
+        )
+        return [{"brand": row.brand, "count": row.count} for row in result.all()]

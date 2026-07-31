@@ -22,6 +22,8 @@ import {
   Thermometer,
   Droplets,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   MapPin,
   Wind,
   GlassWater,
@@ -30,23 +32,29 @@ import {
   Snowflake,
   CalendarDays,
   CloudLightning,
+  Link2,
+  MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { api, ApiError, setAccessToken } from '@/lib/api';
-import { OCCASIONS, Outfit, SuggestRequest } from '@/lib/types';
+import { Item, OCCASIONS, Outfit, SuggestRequest } from '@/lib/types';
+import { useItems } from '@/lib/hooks/use-items';
 import { useWeather, Weather } from '@/lib/hooks/use-weather';
 import { usePreferences } from '@/lib/hooks/use-preferences';
-import { cn } from '@/lib/utils';
+import { cn, parseDateString } from '@/lib/utils';
 import { TempUnit, formatTemp, displayValue, toF, toCelsius } from '@/lib/temperature';
+import { toast } from 'sonner';
+import { ITEM_ROLE } from '@/lib/studio/canonical-order';
 
 // Map occasion values to icons and colors
 const OCCASION_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -334,6 +342,113 @@ function OutfitGenerationProgress() {
   );
 }
 
+function itemSlotLabel(type: string) {
+  const role = ITEM_ROLE[type];
+  if (type === 'cologne') return 'Fragrance';
+  return {
+    full_body: 'One piece',
+    base_top: 'Top',
+    mid_layer: 'Mid layer',
+    outer_layer: 'Outer layer',
+    bottom: 'Bottom',
+    footwear: 'Shoes',
+    accessory: 'Accessory',
+    socks: 'Socks',
+    neckwear: 'Neckwear',
+  }[role] || type;
+}
+
+function StackedOutfitEditor({
+  outfit,
+  wardrobeItems,
+  disabled,
+  onSwap,
+}: {
+  outfit: Outfit;
+  wardrobeItems: Item[];
+  disabled: boolean;
+  onSwap: (currentId: string, replacementId: string) => Promise<void>;
+}) {
+  const alternativesFor = (current: Outfit['items'][number]) => {
+    const currentRole = ITEM_ROLE[current.type];
+    return wardrobeItems.filter((candidate) => {
+      if (candidate.status !== 'ready' || candidate.needs_wash || candidate.is_archived) return false;
+      if (current.type === 'cologne') return candidate.type === 'cologne';
+      return ITEM_ROLE[candidate.type] === currentRole;
+    });
+  };
+
+  const move = async (current: Outfit['items'][number], direction: -1 | 1) => {
+    const alternatives = alternativesFor(current);
+    if (alternatives.length < 2) return;
+    const index = alternatives.findIndex((candidate) => candidate.id === current.id);
+    const nextIndex = ((index < 0 ? 0 : index) + direction + alternatives.length) % alternatives.length;
+    await onSwap(current.id, alternatives[nextIndex].id);
+  };
+
+  return (
+    <div className="space-y-2">
+      {outfit.items.map((item) => {
+        const alternatives = alternativesFor(item);
+        const canFlip = alternatives.length > 1;
+        return (
+          <div key={item.id} className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 rounded-2xl border bg-muted/20 p-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Previous ${itemSlotLabel(item.type)}`}
+              disabled={disabled || !canFlip}
+              onClick={() => move(item, -1)}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center justify-between gap-2 px-1">
+                <Badge variant="secondary" className="text-[11px] uppercase tracking-wide">
+                  {itemSlotLabel(item.type)}
+                </Badge>
+                <span className="truncate text-xs text-muted-foreground">
+                  {canFlip ? `${alternatives.length} clean options` : 'Only available option'}
+                </span>
+              </div>
+              <Link href={`/dashboard/wardrobe?item=${item.id}`} className="group block">
+                <div className="relative mx-auto h-36 w-full max-w-sm overflow-hidden rounded-xl bg-background sm:h-44">
+                  {item.thumbnail_url || item.image_url ? (
+                    <Image
+                      src={item.thumbnail_url || item.image_url || ''}
+                      alt={item.name || item.type}
+                      fill
+                      className="object-contain transition-transform group-hover:scale-[1.03]"
+                      sizes="(max-width: 640px) 70vw, 420px"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center"><Shirt className="h-10 w-10 text-muted-foreground/40" /></div>
+                  )}
+                </div>
+                <div className="mt-1 text-center">
+                  <p className="truncate text-sm font-medium">{item.name || item.type}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {[item.brand, item.primary_color].filter(Boolean).join(' · ') || item.type}
+                  </p>
+                </div>
+              </Link>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Next ${itemSlotLabel(item.type)}`}
+              disabled={disabled || !canFlip}
+              onClick={() => move(item, 1)}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function OutfitResult({
   outfit,
   occasion,
@@ -342,6 +457,11 @@ function OutfitResult({
   onReject,
   onTryAnother,
   onNewRequest,
+  isResponding,
+  wardrobeItems,
+  onSwap,
+  onRefine,
+  onKeepTogether,
 }: {
   outfit: Outfit;
   occasion: string;
@@ -350,7 +470,22 @@ function OutfitResult({
   onReject: () => void;
   onTryAnother: () => void;
   onNewRequest: () => void;
+  isResponding: boolean;
+  wardrobeItems: Item[];
+  onSwap: (currentId: string, replacementId: string) => Promise<void>;
+  onRefine: (message: string) => Promise<string>;
+  onKeepTogether: () => Promise<void>;
 }) {
+  const [refinement, setRefinement] = useState('');
+  const [assistantReply, setAssistantReply] = useState('');
+
+  const submitRefinement = async () => {
+    if (!refinement.trim() || isResponding) return;
+    const reply = await onRefine(refinement.trim());
+    setAssistantReply(reply);
+    setRefinement('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with occasion and new request */}
@@ -362,7 +497,7 @@ function OutfitResult({
           {outfit.scheduled_for && (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <CalendarDays className="h-3 w-3" />
-              {new Date(outfit.scheduled_for + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              {parseDateString(outfit.scheduled_for).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
             </span>
           )}
         </div>
@@ -411,41 +546,12 @@ function OutfitResult({
           )}
         </div>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {outfit.items.map((item) => (
-              <Link
-                key={item.id}
-                href={`/dashboard/wardrobe?item=${item.id}`}
-                className="group relative rounded-xl border overflow-hidden bg-muted/30 hover:shadow-md transition-shadow"
-              >
-                <div className="aspect-square relative">
-                  {item.thumbnail_url ? (
-                    <Image
-                      src={item.thumbnail_url}
-                      alt={item.name || item.type}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform"
-                      sizes="(max-width: 640px) 50vw, 33vw"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <Shirt className="h-10 w-10 text-muted-foreground/50" />
-                    </div>
-                  )}
-                </div>
-                <div className="p-2.5">
-                  <p className="text-sm font-medium truncate">
-                    {item.name || item.type}
-                  </p>
-                  {item.layer_type && (
-                    <Badge variant="secondary" className="text-xs capitalize mt-1">
-                      {item.layer_type}
-                    </Badge>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
+          <StackedOutfitEditor
+            outfit={outfit}
+            wardrobeItems={wardrobeItems}
+            disabled={isResponding}
+            onSwap={onSwap}
+          />
 
           {outfit.style_notes && (
             <div className="mt-4 p-3 bg-muted rounded-lg border">
@@ -457,17 +563,53 @@ function OutfitResult({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Tweak this outfit</p>
+              <p className="text-xs text-muted-foreground">Runs locally: try “different shoes”, “add a layer”, “no cologne”, or “use the blue Nike jacket”.</p>
+            </div>
+          </div>
+          <Textarea
+            value={refinement}
+            onChange={(event) => setRefinement(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void submitRefinement();
+              }
+            }}
+            placeholder="What would you change?"
+            rows={2}
+            disabled={isResponding}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button variant="secondary" size="sm" onClick={submitRefinement} disabled={!refinement.trim() || isResponding}>
+              {isResponding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-2 h-4 w-4" />}
+              Apply
+            </Button>
+            <Button variant="outline" size="sm" onClick={onKeepTogether} disabled={isResponding}>
+              <Link2 className="mr-2 h-4 w-4" />
+              Keep these together
+            </Button>
+          </div>
+          {assistantReply && <p className="rounded-lg bg-muted p-2.5 text-sm text-muted-foreground">{assistantReply}</p>}
+        </CardContent>
+      </Card>
+
       {/* Action buttons */}
       <div className="flex gap-3 justify-center">
-        <Button variant="outline" size="lg" onClick={onTryAnother} className="gap-2">
-          <RefreshCw className="h-4 w-4" />
+        <Button variant="outline" size="lg" onClick={onTryAnother} className="gap-2" disabled={isResponding}>
+          <RefreshCw className={cn('h-4 w-4', isResponding && 'animate-spin')} />
           Try Another
         </Button>
-        <Button size="lg" onClick={onAccept} className="gap-2">
+        <Button size="lg" onClick={onAccept} className="gap-2" disabled={isResponding}>
           <ThumbsUp className="h-4 w-4" />
           Love it
         </Button>
-        <Button variant="ghost" size="lg" onClick={onReject} className="px-3" aria-label="Dismiss outfit">
+        <Button variant="ghost" size="lg" onClick={onReject} className="px-3" aria-label="Dismiss outfit" disabled={isResponding}>
           <ThumbsDown className="h-4 w-4" />
         </Button>
       </div>
@@ -486,6 +628,9 @@ export default function SuggestPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [outfit, setOutfit] = useState<Outfit | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isResponding, setIsResponding] = useState(false);
+  const [strategy, setStrategy] = useState<'rules' | 'ai'>('rules');
+  const { data: wardrobeData } = useItems({ is_archived: false }, 1, 100);
 
   useEffect(() => {
     if (prefs?.default_occasion && !occasionInitialized && !selectedOccasion) {
@@ -507,6 +652,7 @@ export default function SuggestPage() {
     try {
       const request: SuggestRequest = {
         occasion: selectedOccasion,
+        strategy,
       };
 
       if (weatherOverride) {
@@ -534,47 +680,120 @@ export default function SuggestPage() {
   };
 
   const handleAccept = async () => {
-    if (!outfit) return;
+    if (!outfit || isResponding) return;
 
     if (session?.accessToken) {
       setAccessToken(session.accessToken as string);
     }
 
+    setIsResponding(true);
     try {
       await api.post(`/outfits/${outfit.id}/accept`);
       setOutfit(null);
       setSelectedOccasion(null);
+      toast.success('Saved. Mark it worn from History after you wear it.');
     } catch (err) {
       console.error('Accept error:', err);
+      toast.error('Could not save your response. Please try again.');
+    } finally {
+      setIsResponding(false);
     }
   };
 
-  const handleTryAnother = () => {
-    setOutfit(null);
-    handleGenerate();
+  const handleTryAnother = async () => {
+    if (!outfit || isResponding) return;
+    setIsResponding(true);
+    try {
+      // Neutral signal: close this pending look without teaching the system that
+      // every individual piece is disliked, then use a cached alternative.
+      await api.post(`/outfits/${outfit.id}/skip`);
+      setOutfit(null);
+      await handleGenerate();
+    } catch (err) {
+      console.error('Try another error:', err);
+      toast.error('Could not load another outfit. Please try again.');
+    } finally {
+      setIsResponding(false);
+    }
   };
 
   const handleReject = async () => {
-    if (!outfit) return;
+    if (!outfit || isResponding) return;
 
     if (session?.accessToken) {
       setAccessToken(session.accessToken as string);
     }
 
+    setIsResponding(true);
     try {
       await api.post(`/outfits/${outfit.id}/reject`);
+      setOutfit(null);
+      await handleGenerate();
     } catch (err) {
       console.error('Reject error:', err);
+      toast.error('Could not save your response. Please try again.');
+    } finally {
+      setIsResponding(false);
     }
-
-    setOutfit(null);
-    handleGenerate();
   };
 
   const handleNewRequest = () => {
     setOutfit(null);
     setSelectedOccasion(null);
     setError(null);
+  };
+
+  const handleSwap = async (currentId: string, replacementId: string) => {
+    if (!outfit || currentId === replacementId || isResponding) return;
+    if (session?.accessToken) setAccessToken(session.accessToken as string);
+    setIsResponding(true);
+    try {
+      const itemIds = outfit.items.map((item) => item.id === currentId ? replacementId : item.id);
+      const updated = await api.patch<Outfit>(`/outfits/${outfit.id}`, { items: itemIds });
+      setOutfit(updated);
+    } catch (error) {
+      console.error('Swap error:', error);
+      toast.error('Could not swap that item.');
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  const handleRefine = async (message: string) => {
+    if (!outfit || isResponding) return 'Please wait for the current change to finish.';
+    if (session?.accessToken) setAccessToken(session.accessToken as string);
+    setIsResponding(true);
+    try {
+      const result = await api.post<{ outfit: Outfit; reply: string }>(
+        `/outfits/${outfit.id}/refine`,
+        { message },
+      );
+      setOutfit(result.outfit);
+      return result.reply;
+    } catch (error) {
+      console.error('Refine error:', error);
+      toast.error('Could not apply that change.');
+      return 'I could not apply that change. Try a specific garment, color, or brand.';
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  const handleKeepTogether = async () => {
+    if (!outfit || isResponding) return;
+    if (session?.accessToken) setAccessToken(session.accessToken as string);
+    setIsResponding(true);
+    try {
+      const result = await api.post<{ saved_pairs: number; message: string }>(
+        `/outfits/${outfit.id}/keep-together`,
+      );
+      toast.success(result.message);
+    } catch (error) {
+      console.error('Keep together error:', error);
+      toast.error('Could not save this combination.');
+    } finally {
+      setIsResponding(false);
+    }
   };
 
   return (
@@ -619,6 +838,28 @@ export default function SuggestPage() {
                 temperatureUnit={temperatureUnit}
               />
 
+              <div className="space-y-2">
+                <h2 className="font-semibold">How should it build the outfit?</h2>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+                  <button
+                    type="button"
+                    onClick={() => setStrategy('rules')}
+                    className={cn('rounded-lg px-3 py-2 text-left transition-colors', strategy === 'rules' ? 'bg-background shadow-sm' : 'text-muted-foreground')}
+                  >
+                    <span className="block text-sm font-medium">Smart rules</span>
+                    <span className="block text-xs text-muted-foreground">Instant · learned pairs · no LLM</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStrategy('ai')}
+                    className={cn('rounded-lg px-3 py-2 text-left transition-colors', strategy === 'ai' ? 'bg-background shadow-sm' : 'text-muted-foreground')}
+                  >
+                    <span className="block text-sm font-medium">AI stylist</span>
+                    <span className="block text-xs text-muted-foreground">Creative · slower · uses text AI</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Generate button */}
               <div className="pt-2">
                 <Button
@@ -653,6 +894,11 @@ export default function SuggestPage() {
           onReject={handleReject}
           onTryAnother={handleTryAnother}
           onNewRequest={handleNewRequest}
+          isResponding={isResponding}
+          wardrobeItems={wardrobeData?.items || []}
+          onSwap={handleSwap}
+          onRefine={handleRefine}
+          onKeepTogether={handleKeepTogether}
         />
       )}
     </div>

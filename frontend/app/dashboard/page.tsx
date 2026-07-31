@@ -46,6 +46,7 @@ import { usePendingOutfits, useAcceptOutfit, useRejectOutfit, useBulkDeleteOutfi
 import { useSchedules, useNotificationSettings } from '@/lib/hooks/use-notifications';
 import { useFamily } from '@/lib/hooks/use-family';
 import { toast } from 'sonner';
+import { parseDateString } from '@/lib/utils';
 
 function WeatherCard() {
   const { data: weather, isLoading, isError } = useWeather();
@@ -248,7 +249,7 @@ function PendingOutfitsCard() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium capitalize truncate">{outfit.occasion}</p>
               <p className="text-xs text-muted-foreground">
-                {outfit.scheduled_for ? new Date(outfit.scheduled_for).toLocaleDateString('en-US', {
+                {outfit.scheduled_for ? parseDateString(outfit.scheduled_for).toLocaleDateString('en-US', {
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',

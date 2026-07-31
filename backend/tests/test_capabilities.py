@@ -316,17 +316,13 @@ async def test_pairings_returns_503_when_text_disabled(client, auth_headers, mon
     assert "external agent" in resp.json()["detail"]
 
 
-# --- Service guards run first: deferred contract is unconditional ------------
-# These exercise the REAL guard placement (the 503 tests above stub the service
-# methods). They lock in fail-fast ordering: with text disabled the guard must
-# fire before any location/weather/item validation, so the deferred contract
-# never depends on unrelated preconditions.
+# --- AI-only service guards run first -----------------------------------------
+# Rule-based outfit suggestions intentionally work without text AI.  These
+# exercise the real guard placement for flows that explicitly request AI.
 
 
 @pytest.mark.asyncio
-async def test_generate_recommendation_defers_before_location_check(
-    db_session, test_user, monkeypatch
-):
+async def test_ai_recommendation_defers_before_location_check(db_session, test_user, monkeypatch):
     from app.services.recommendation_service import RecommendationService
 
     monkeypatch.setattr(
@@ -337,7 +333,11 @@ async def test_generate_recommendation_defers_before_location_check(
     # test_user has no location set; a misordered guard would raise
     # ValueError("User location not set") before reaching the AI guard.
     with pytest.raises(AIDisabledError):
-        await service.generate_recommendation(user=test_user, occasion="casual")
+        await service.generate_recommendation(
+            user=test_user,
+            occasion="casual",
+            strategy="ai",
+        )
 
 
 @pytest.mark.asyncio

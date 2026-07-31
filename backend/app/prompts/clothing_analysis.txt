@@ -22,7 +22,7 @@ Use null if the type is specific enough (e.g. jeans, hoodie, blazer).
 
 BRAND (optional): Brand name visible on the item, label, or bottle. Preserve exact casing (YSL, H&M, Nike). null if not clearly readable.
 
-NAME (optional): Short product/display name when clearly readable — especially for cologne (e.g. "Dior Sauvage") or named shoe models (e.g. "Air Force 1"). Preserve proper casing. null if unknown.
+NAME (optional): Short product/display name when clearly readable — especially for cologne (e.g. "Dior Sauvage") or named shoe models (e.g. "Air Force 1"). Preserve proper casing. Inspect bottle text, tongue labels, logos, monograms, patches, and hardware carefully, but never guess a brand from style alone. null if unknown.
 
 PRIMARY_COLOR (required, pick one):
 black, white, gray, navy, blue, light-blue, red, burgundy, pink, green, olive, yellow, orange, purple, brown, tan, beige, cream, gold, silver
@@ -49,5 +49,12 @@ FIT (optional, pick one or null — clothing only):
 slim, regular, relaxed, oversized, tailored, cropped
 Always null for cologne, shoes, and accessories.
 
+FRAGRANCE DETAILS (cologne only; null/[] for every other type):
+- fragrance_family: one of fresh, citrus, aquatic, green, floral, fruity, woody, amber, spicy, gourmand, leather, aromatic, musk when identifiable from readable product knowledge; otherwise null
+- scent_notes: up to 6 recognizable or owner-provided notes; otherwise []
+- concentration: one of eau-de-cologne, eau-de-toilette, eau-de-parfum, parfum, extrait when readable; otherwise null
+- longevity: short, moderate, long, very-long only when known; otherwise null
+- sillage: intimate, moderate, strong only when known; otherwise null
+
 Output this exact JSON structure (a single object, NOT wrapped in an array):
-{"type":"TYPE","subtype":null,"brand":null,"name":null,"primary_color":"COLOR","colors":["COLOR1"],"pattern":"PATTERN","material":null,"formality":"FORMALITY","style":["STYLE1"],"season":["SEASON1","SEASON2"],"fit":null}
+{"type":"TYPE","subtype":null,"brand":null,"name":null,"primary_color":"COLOR","colors":["COLOR1"],"pattern":"PATTERN","material":null,"formality":"FORMALITY","style":["STYLE1"],"season":["SEASON1","SEASON2"],"fit":null,"fragrance_family":null,"scent_notes":[],"concentration":null,"longevity":null,"sillage":null}

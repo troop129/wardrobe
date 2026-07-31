@@ -76,9 +76,10 @@ export function AddItemDialog({ open, onOpenChange }: AddItemDialogProps) {
 
   // Cleanup blob URLs on unmount to prevent memory leaks
   useEffect(() => {
+    const blobUrls = blobUrlsRef.current;
     return () => {
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      blobUrlsRef.current.clear();
+      blobUrls.forEach((url) => URL.revokeObjectURL(url));
+      blobUrls.clear();
     };
   }, []);
 

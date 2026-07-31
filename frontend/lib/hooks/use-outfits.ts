@@ -16,8 +16,10 @@ export interface OutfitItem {
   type: string;
   subtype: string | null;
   name: string | null;
+  brand: string | null;
   primary_color: string | null;
   colors: string[];
+  tags: Record<string, unknown>;
   image_path: string;
   thumbnail_path: string | null;
   thumbnail_url?: string;

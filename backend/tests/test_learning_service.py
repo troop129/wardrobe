@@ -253,3 +253,21 @@ class TestItemPairScores:
         assert pair.times_accepted == 1
         assert "casual" in (pair.occasion_performance or {})
         assert pair.occasion_performance["casual"]["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_reprocessing_feedback_does_not_double_count_pair(
+        self, db_session, test_user_for_learning
+    ):
+        user_id = test_user_for_learning.id
+        outfit_id = await self._seed_two_item_outfit(db_session, user_id, accepted=True, rating=4)
+        service = LearningService(db_session)
+
+        await service.process_feedback(outfit_id, user_id)
+        await service.process_feedback(outfit_id, user_id)
+
+        pair = (
+            await db_session.execute(select(ItemPairScore).where(ItemPairScore.user_id == user_id))
+        ).scalar_one()
+        assert pair.times_paired == 1
+        assert pair.times_accepted == 1
+        assert pair.rating_count == 1

@@ -3,21 +3,13 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { X, Home, Shirt, Sparkles, LayoutGrid, History, BarChart3, Settings } from 'lucide-react';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const navigation = [
-  { name: 'Home', href: '/dashboard', icon: Home },
-  { name: 'Wardrobe', href: '/dashboard/wardrobe', icon: Shirt },
-  { name: 'Get an outfit', href: '/dashboard/suggest', icon: Sparkles },
-  { name: 'My outfits', href: '/dashboard/outfits', icon: LayoutGrid },
-  { name: 'Wear history', href: '/dashboard/history', icon: History },
-];
-
-const secondaryNavigation = [
-  { name: 'Insights', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-];
+import {
+  PRIMARY_NAVIGATION,
+  SECONDARY_NAVIGATION,
+  isDashboardRouteActive,
+} from '@/lib/navigation';
 
 interface MobileSidebarProps {
   open: boolean;
@@ -81,10 +73,8 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
               <li>
                 <ul role="list" className="-mx-2 space-y-1">
-                  {navigation.map((item) => {
-                    const isActive = item.href === '/dashboard'
-                      ? pathname === '/dashboard'
-                      : pathname === item.href || pathname.startsWith(item.href + '/');
+                  {PRIMARY_NAVIGATION.map((item) => {
+                    const isActive = isDashboardRouteActive(pathname, item.href);
                     return (
                       <li key={item.name}>
                         <Link
@@ -110,9 +100,9 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                   Settings
                 </div>
                 <ul role="list" className="-mx-2 mt-2 space-y-1">
-                  {secondaryNavigation.map((item) => {
+                  {SECONDARY_NAVIGATION.map((item) => {
                     const matchesPath = pathname === item.href || pathname.startsWith(item.href + '/');
-                    const claimedByPrimary = navigation.some(
+                    const claimedByPrimary = PRIMARY_NAVIGATION.some(
                       (primary) => pathname === primary.href || pathname.startsWith(primary.href + '/')
                     );
                     const isActive = matchesPath && !claimedByPrimary;

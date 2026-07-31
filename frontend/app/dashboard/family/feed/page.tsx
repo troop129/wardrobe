@@ -24,6 +24,7 @@ import { FamilyRatingForm, FamilyRatingsDisplay } from '@/components/family-rati
 import { OutfitPreviewDialog } from '@/components/outfit-preview-dialog';
 import Image from 'next/image';
 import Link from 'next/link';
+import { parseDateString } from '@/lib/utils';
 
 function getInitials(name: string) {
   return name
@@ -94,7 +95,7 @@ function FeedOutfitCard({
             </Badge>
           </div>
           <span className="text-xs text-muted-foreground">
-            {outfit.scheduled_for ? new Date(outfit.scheduled_for).toLocaleDateString(undefined, {
+            {outfit.scheduled_for ? parseDateString(outfit.scheduled_for).toLocaleDateString(undefined, {
               month: 'short',
               day: 'numeric',
               year: 'numeric',

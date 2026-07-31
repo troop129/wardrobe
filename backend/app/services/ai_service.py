@@ -40,6 +40,11 @@ class ClothingTags(BaseModel):
     name: str | None = None
     condition: str | None = None
     features: list[str] = []
+    fragrance_family: str | None = None
+    scent_notes: list[str] = []
+    concentration: str | None = None
+    longevity: str | None = None
+    sillage: str | None = None
     confidence: float = 0.0
     logprobs_confidence: float | None = None
     description: str | None = None
@@ -491,6 +496,15 @@ class AIService:
         tags.style = validate_list(data.get("style", []), VALID_STYLES)
         tags.season = validate_list(data.get("season", []), VALID_SEASONS)
         tags.fit = validate_value(data.get("fit"), VALID_FIT)
+        for field in ("fragrance_family", "concentration", "longevity", "sillage"):
+            value = data.get(field)
+            if isinstance(value, str) and value.strip():
+                setattr(tags, field, value.strip().lower()[:50])
+        scent_notes = data.get("scent_notes")
+        if isinstance(scent_notes, list):
+            tags.scent_notes = [
+                str(note).strip().lower()[:50] for note in scent_notes if str(note).strip()
+            ][:12]
         tags.confidence = compute_tag_completeness(tags)
 
         logger.info(
